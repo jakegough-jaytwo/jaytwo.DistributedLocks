@@ -1,0 +1,33 @@
+services:
+
+  postgres:
+    image: postgres:latest
+    restart: always
+    environment:
+      POSTGRES_USER: pguser
+      POSTGRES_PASSWORD: pgpass
+      POSTGRES_DB: pgdb
+#    network_mode: host
+    ports:
+      - 55432:5432
+
+  mysql:
+    image: mysql:latest
+    restart: always
+    command: --bind-address=0.0.0.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: mydb
+      MYSQL_USER: myuser
+      MYSQL_PASSWORD: mypass
+#    network_mode: host
+    ports:
+      - "53306:3306"
+
+  redis:
+    image: redis:latest
+    restart: always
+    command: redis-server --requirepass redpass
+#    network_mode: host
+    ports:
+      - "56379:6379"

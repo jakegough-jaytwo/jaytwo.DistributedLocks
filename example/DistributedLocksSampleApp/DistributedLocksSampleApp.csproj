@@ -1,0 +1,14 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0</TargetFrameworks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\jaytwo.DistributedLocks\jaytwo.DistributedLocks.csproj" />
+    <ProjectReference Include="..\..\src\jaytwo.DistributedLocks.Postgres\jaytwo.DistributedLocks.Postgres.csproj" />
+    <ProjectReference Include="..\..\src\jaytwo.DistributedLocks.MySql\jaytwo.DistributedLocks.MySql.csproj" />
+    <ProjectReference Include="..\..\src\jaytwo.DistributedLocks.RedLock\jaytwo.DistributedLocks.RedLock.csproj" />
+  </ItemGroup>
+
+</Project>
