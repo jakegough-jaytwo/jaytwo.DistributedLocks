@@ -2,6 +2,8 @@ services:
 
   postgres:
     image: postgres:latest
+    profiles:
+      - "testernet"
     expose:
       - "5432"
     environment:
@@ -16,6 +18,8 @@ services:
 
   mysql:
     image: mysql:latest
+    profiles:
+      - "testernet"
     expose:
       - "3306"
     command: --bind-address=0.0.0.0
@@ -32,6 +36,8 @@ services:
 
   redis:
     image: redis:latest
+    profiles:
+      - "testernet"
     expose:
       - "6379"
     command: redis-server --requirepass redpass
@@ -40,20 +46,3 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
-
-  tester:
-    build: .
-    environment:
-      TEST_ENV: composeinternal
-    # command: [ "/bin/sh", "-c", "echo $$TEST_ENV" ]
-    command: "make test"
-    # command: [ "/bin/sh", "-c", "make test" ]
-    # command: "echo $$TEST_ENV"
-    # command: [ "/bin/sh", "-c", "ping redis" ]
-    depends_on:
-      postgres:
-        condition: service_healthy
-      mysql:
-        condition: service_healthy
-      redis:
-        condition: service_healthy

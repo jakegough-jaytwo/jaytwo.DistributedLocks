@@ -13,6 +13,8 @@ BUILD_PACKED_DIR=${TOPDIR}/out/packed
 DOCKER_TAG?=$(call getDockerTag,$(BUILD_SLN))
 DOCKER_BASE_TAG?=${DOCKER_TAG}__base
 DOCKER_BUILDER_TAG?=${DOCKER_TAG}__builder
+DOCKER_COMPOSE_PROJECT=${DOCKER_TAG}__testernet
+DOCKER_COMPOSE_NETWORK=${DOCKER_COMPOSE_PROJECT}_default
 DOCKER_BUILDER_CONTAINER?=${DOCKER_BUILDER_TAG}
 DOCKER_RUN_MAKE_TARGETS?=run
 TIMESTAMP?=$(call getTimestamp)
@@ -77,8 +79,8 @@ nuget-check:
 				-gte "$$nupkg" \
 				--same-major \
 				--fail-on-match \
-			&& echo "$$(basename $$nupkg): Ready to push!" \
-			|| echo "$$(basename $$nupkg): Failed NuGetCheck; cannot push."; \
+			&& echo "NuGetCheck OK: $$(basename $$nupkg)" \
+			|| echo "NuGetCheck Failed: $$(basename $$nupkg)"; \
 		fi; \
 	done
 
@@ -94,14 +96,14 @@ nuget-push:
 		fi; \
 	done
 
-docker-tester-clean:
-	docker compose --profile "*" down -v --remove-orphans
+testernet-up:
+	docker compose --project-name "${DOCKER_COMPOSE_PROJECT}" --profile "testernet" up -d --wait --remove-orphans
 
-docker-tester-build: docker-tester-clean
-	docker compose --profile "*" up --no-start --build
+testernet-run:
+	docker run -it --rm --network "${DOCKER_COMPOSE_NETWORK}" -e TEST_ENV=testernet ${DOCKER_BUILDER_TAG}
 
-docker-tester:
-	docker compose run --rm tester
+testernet-clean:
+	docker compose --project-name "${DOCKER_COMPOSE_PROJECT}" --profile "*" down -v --remove-orphans
 
 docker-builder:
 	# building the base image to force caching those layers in an otherwise discarded stage of the multistage dockerfile
