@@ -5,19 +5,23 @@ namespace jaytwo.DistributedLocks.Postgres;
 
 public class PostgresDistributedLock : IDistributedLock
 {
-    private NpgsqlTransaction _transaction;
+    private NpgsqlConnection _connection;
 
-    public PostgresDistributedLock(NpgsqlTransaction transaction, bool acquired)
+    public PostgresDistributedLock(NpgsqlConnection connection)
     {
-        _transaction = transaction;
-        IsAcquired = acquired;
+        _connection = connection;
+        IsAcquired = true;
     }
 
     public bool IsAcquired { get; }
 
     public void Dispose()
-        => _transaction.Dispose();
+    {
+        _connection.Dispose();
+    }
 
     public async ValueTask DisposeAsync()
-        => await _transaction!.DisposeAsync();
+    {
+        await _connection.DisposeAsync();
+    }
 }

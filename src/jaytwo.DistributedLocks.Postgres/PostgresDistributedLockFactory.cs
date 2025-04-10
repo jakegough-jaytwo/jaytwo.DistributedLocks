@@ -11,16 +11,29 @@ namespace jaytwo.DistributedLocks.Postgres;
 
 public class PostgresDistributedLockFactory : IDistributedLockFactory
 {
-    private NpgsqlConnection _connection;
+    private Func<NpgsqlConnection> _connectionFactory;
 
-    public PostgresDistributedLockFactory(NpgsqlConnection connection, TimeSpan? defaultTimeout = default)
-        : this(Guid.NewGuid().ToString(), connection, defaultTimeout)
+    // TODO: test instance keys
+    // TODO: organize timeouts (do we really want a timespan? postgres and mysql both only use full seconds)
+
+    public PostgresDistributedLockFactory(string connectionString, TimeSpan? defaultTimeout = default)
+        : this(Guid.NewGuid().ToString(), connectionString, defaultTimeout)
     {
     }
 
-    public PostgresDistributedLockFactory(string instanceKey, NpgsqlConnection connection, TimeSpan? defaultTimeout = default)
+    public PostgresDistributedLockFactory(string instanceKey, string connectionString, TimeSpan? defaultTimeout = default)
+        : this(instanceKey, () => CreateConnection(connectionString), defaultTimeout)
     {
-        _connection = connection;
+    }
+
+    public PostgresDistributedLockFactory(Func<NpgsqlConnection> connectionFactory, TimeSpan? defaultTimeout = default)
+        : this(Guid.NewGuid().ToString(), connectionFactory, defaultTimeout)
+    {
+    }
+
+    public PostgresDistributedLockFactory(string instanceKey, Func<NpgsqlConnection> connectionFactory, TimeSpan? defaultTimeout = default)
+    {
+        _connectionFactory = connectionFactory;
         DefaultTimeout = defaultTimeout ?? TimeSpan.FromSeconds(30);
         InstanceKey = instanceKey;
     }
@@ -33,27 +46,21 @@ public class PostgresDistributedLockFactory : IDistributedLockFactory
     {
         var hashedKey = HashStringToUInt($"{key}.{InstanceKey}");
 
-        // pg_advisory_lock and pg_advisory_xact_lock just blocks until it acquires the lock
-        string query = $"SELECT pg_advisory_xact_lock({hashedKey})";
-
-        var transaction = await BeginTransactionAsync(cancellationToken);
-        try
+        if (timeout.HasValue && timeout.Value == TimeSpan.Zero)
         {
-            await ExecuteScalarAsync<bool>(query, transaction, timeout ?? DefaultTimeout);
-            return new PostgresDistributedLock(transaction, true);
+            return await PgAdvisoryXactLock(hashedKey, cancellationToken);
         }
-        catch
+        else
         {
-            // no matter how we got here, if the sql execution fails then we for sure did not get the lock
-            await transaction.DisposeAsync();
+            var timeoutSeconds = (int)(timeout?.TotalSeconds ?? DefaultTimeout.TotalSeconds);
+            return await PgAdvisoryLock(hashedKey, timeoutSeconds, cancellationToken);
         }
-
-        return NullLock.Instance;
     }
 
     public async Task<IReadOnlyDictionary<string, object>> HealthCheckAsync(CancellationToken cancellationToken = default)
     {
-        var connectionStringBuilder = new NpgsqlConnectionStringBuilder(_connection.ConnectionString);
+        using var connection = _connectionFactory.Invoke();
+        var connectionStringBuilder = new NpgsqlConnectionStringBuilder(connection.ConnectionString);
 
         var result = new Dictionary<string, object>()
         {
@@ -65,7 +72,7 @@ public class PostgresDistributedLockFactory : IDistributedLockFactory
 
         try
         {
-            var nowTime = await ExecuteScalarAsync<DateTime>("SELECT now()", cancellationToken: cancellationToken);
+            var nowTime = await connection.ExecuteScalarAsync<DateTime>("SELECT now()", cancellationToken: cancellationToken);
             result["serverTime"] = DateTime.SpecifyKind(nowTime, DateTimeKind.Unspecified).ToString("O");
         }
         catch (Exception ex)
@@ -77,9 +84,9 @@ public class PostgresDistributedLockFactory : IDistributedLockFactory
 
         var testKey = Guid.NewGuid().ToString();
         bool lockAcquired = false;
-        await using (var redlock = await CreateLockAsync(testKey, TimeSpan.Zero, cancellationToken))
+        await using (var myLock = await CreateLockAsync(testKey, TimeSpan.Zero, cancellationToken))
         {
-            lockAcquired = redlock.IsAcquired;
+            lockAcquired = myLock.IsAcquired;
         }
 
         result.Add("lock_acquired", lockAcquired);
@@ -89,12 +96,11 @@ public class PostgresDistributedLockFactory : IDistributedLockFactory
 
     public void Dispose()
     {
-        _connection.Dispose();
     }
 
     public async ValueTask DisposeAsync()
     {
-        await _connection.DisposeAsync();
+        await Task.CompletedTask;
     }
 
     private static uint HashStringToUInt(string input)
@@ -104,42 +110,79 @@ public class PostgresDistributedLockFactory : IDistributedLockFactory
         return BitConverter.ToUInt32(hashBytes, 0);
     }
 
-    private async Task<T?> ExecuteScalarAsync<T>(string query, NpgsqlTransaction? transaction = default, TimeSpan timeout = default, CancellationToken cancellationToken = default)
+    private static NpgsqlConnection CreateConnection(string connectionString)
     {
-        var result = await ExecuteScalarAsync(query, transaction, timeout, cancellationToken);
+        var connectionStringWithPoolingDisabled = GetConnectionStringWithPoolingDisabled(connectionString);
+        return new NpgsqlConnection(connectionStringWithPoolingDisabled);
+    }
 
-        if (result is T value)
+    private static string GetConnectionStringWithPoolingDisabled(string connectionString)
+    {
+        var builder = new NpgsqlConnectionStringBuilder(connectionString);
+        builder.Pooling = false;
+        return builder.ToString();
+    }
+
+    private static void EnsureConnectionPoolingDisabled(NpgsqlConnection connection)
+    {
+        var builder = new NpgsqlConnectionStringBuilder(connection.ConnectionString);
+        if (builder.Pooling)
         {
-            return value;
+            throw new InvalidOperationException("Connection pooling is enabled. Please disable pooling for advisory locks to work correctly.");
+        }
+    }
+
+    private async Task<IDistributedLock> PgAdvisoryLock(uint hashedKey, int timeoutSeconds, CancellationToken cancellationToken)
+    {
+        string query = $"SELECT pg_advisory_lock({hashedKey})";
+
+        bool acquired = false;
+        var connection = _connectionFactory.Invoke();
+        try
+        {
+            EnsureConnectionPoolingDisabled(connection);
+            await connection.ExecuteNonQueryAsync(query, timeoutSeconds, cancellationToken);
+            acquired = true;
+            return new PostgresDistributedLock(connection);
+        }
+        catch (NpgsqlException ex) when (ex.InnerException is TimeoutException)
+        {
+            acquired = false;
+            return NullLock.Instance;
+        }
+        finally
+        {
+            if (!acquired)
+            {
+                await connection.DisposeAsync();
+            }
+        }
+    }
+
+    private async Task<IDistributedLock> PgAdvisoryXactLock(uint hashedKey, CancellationToken cancellationToken)
+    {
+        string query = $"SELECT pg_advisory_xact_lock({hashedKey})";
+
+        bool acquired = false;
+        var connection = _connectionFactory.Invoke();
+
+        try
+        {
+            EnsureConnectionPoolingDisabled(connection);
+            acquired = await connection.ExecuteScalarAsync<bool>(query, cancellationToken: cancellationToken);
+            if (acquired)
+            {
+                return new PostgresDistributedLock(connection);
+            }
+        }
+        finally
+        {
+            if (!acquired)
+            {
+                await connection.DisposeAsync();
+            }
         }
 
-        return default(T?);
-    }
-
-    private async Task InitOpenConnectionAsync(CancellationToken cancellationToken = default)
-    {
-        if (_connection.State != ConnectionState.Open)
-        {
-            await _connection.OpenAsync(cancellationToken);
-        }
-    }
-
-    private async Task<object?> ExecuteScalarAsync(string query, NpgsqlTransaction? transaction = default, TimeSpan timeout = default, CancellationToken cancellationToken = default)
-    {
-        // not disposing the command because it will end the connection
-        var command = new NpgsqlCommand(query, _connection)
-        {
-            CommandTimeout = (int)timeout.TotalSeconds,
-            Transaction = transaction,
-        };
-
-        await InitOpenConnectionAsync(cancellationToken);
-        return await command.ExecuteScalarAsync(cancellationToken);
-    }
-
-    private async Task<NpgsqlTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default)
-    {
-        await InitOpenConnectionAsync(cancellationToken);
-        return await _connection.BeginTransactionAsync(cancellationToken);
+        return NullLock.Instance;
     }
 }

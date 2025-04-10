@@ -4,7 +4,7 @@ using System.Data.Common;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace jaytwo.DistributedLocks.MySql;
+namespace jaytwo.DistributedLocks.Postgres;
 
 internal static class MiniDapper
 {

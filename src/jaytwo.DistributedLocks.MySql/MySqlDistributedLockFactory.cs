@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
@@ -11,6 +12,16 @@ namespace jaytwo.DistributedLocks.MySql;
 public class MySqlDistributedLockFactory : IDistributedLockFactory
 {
     private Func<MySqlConnection> _connectionFactory;
+
+    public MySqlDistributedLockFactory(string connectionString, TimeSpan? defaultTimeout = default)
+        : this(Guid.NewGuid().ToString(), connectionString, defaultTimeout)
+    {
+    }
+
+    public MySqlDistributedLockFactory(string instanceKey, string connectionString, TimeSpan? defaultTimeout = default)
+        : this(instanceKey, () => CreateConnection(connectionString), defaultTimeout)
+    {
+    }
 
     public MySqlDistributedLockFactory(Func<MySqlConnection> connectionFactory, TimeSpan? defaultTimeout = default)
         : this(Guid.NewGuid().ToString(), connectionFactory, defaultTimeout)
@@ -36,15 +47,24 @@ public class MySqlDistributedLockFactory : IDistributedLockFactory
         string query = $"SELECT GET_LOCK('{hashedKey}', {effectiveTimeout.TotalSeconds})";
 
         var connection = _connectionFactory.Invoke();
+        bool acquired = false;
         try
         {
-            await connection.ExecuteScalarAsync<bool>(query, cancellationToken);
-            return new MySqlDistributedLock(connection, hashedKey, true);
+            EnsureConnectionPoolingDisabled(connection);
+
+            acquired = await connection.ExecuteScalarAsync<bool>(query, cancellationToken: cancellationToken);
+
+            if (acquired)
+            {
+                return new MySqlDistributedLock(connection);
+            }
         }
-        catch
+        finally
         {
-            // no matter how we got here, if the sql execution fails then we for sure did not get the loc
-            await connection.DisposeAsync();
+            if (!acquired)
+            {
+                await connection.DisposeAsync();
+            }
         }
 
         return NullLock.Instance;
@@ -101,5 +121,27 @@ public class MySqlDistributedLockFactory : IDistributedLockFactory
         using var md5 = MD5.Create();
         byte[] hashBytes = md5.ComputeHash(Encoding.UTF8.GetBytes(input));
         return BitConverter.ToUInt32(hashBytes, 0);
+    }
+
+    private static MySqlConnection CreateConnection(string connectionString)
+    {
+        var connectionStringWithPoolingDisabled = GetConnectionStringWithPoolingDisabled(connectionString);
+        return new MySqlConnection(connectionStringWithPoolingDisabled);
+    }
+
+    private static string GetConnectionStringWithPoolingDisabled(string connectionString)
+    {
+        var builder = new MySqlConnectionStringBuilder(connectionString);
+        builder.Pooling = false;
+        return builder.ToString();
+    }
+
+    private static void EnsureConnectionPoolingDisabled(MySqlConnection connection)
+    {
+        var builder = new MySqlConnectionStringBuilder(connection.ConnectionString);
+        if (builder.Pooling)
+        {
+            throw new InvalidOperationException("Connection pooling is enabled. Please disable pooling for advisory locks to work correctly.");
+        }
     }
 }

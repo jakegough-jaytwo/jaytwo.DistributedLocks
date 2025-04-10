@@ -25,8 +25,8 @@ builder.Services.AddScoped(x =>
 {
     var config = x.GetRequiredService<IConfiguration>();
     var connectionString = config["ConnectionStrings:PostgresDb"];
-    var connection = new NpgsqlConnection(connectionString);
-    return new PostgresDistributedLockFactory("foo", connection);
+    var connectionFactory = () => new NpgsqlConnection(connectionString);
+    return new PostgresDistributedLockFactory("foo", connectionFactory);
 });
 
 builder.Services.AddScoped(x =>

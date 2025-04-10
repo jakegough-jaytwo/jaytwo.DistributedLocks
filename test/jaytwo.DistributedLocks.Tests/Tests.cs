@@ -1,7 +1,7 @@
 using Xunit;
 using Xunit.Abstractions;
 
-namespace jaytwo.BrailleCharts.Tests;
+namespace jaytwo.DistributedLocks.Tests;
 
 public class Tests
 {
