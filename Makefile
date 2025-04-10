@@ -36,9 +36,9 @@ restore:
 build: restore
 	dotnet build "${BUILD_SLN}"
 
-test: unit-test
+test: build unit-test
 
-unit-test: build
+unit-test:
 	rm -rf "${BUILD_TEST_RESULTS_DIR}"
 	rm -rf "${BUILD_TEST_COVERAGE_DIR}"
 	for dir in $$(echo "${BUILD_TEST_DIRS}" | tr ':' '\n'); do \

@@ -18,7 +18,7 @@ helper.run('linux && make && docker', {
                 sh "make docker-builder"
                 sh "make testernet-up"
             }
-            docker.image(dockerBuilderTag).inside("--network ${dockerComposeNetwork}") {
+            docker.image(dockerBuilderTag).inside("-e TEST_ENV=testernet--network ${dockerComposeNetwork}") {
                 stage ('Unit Test') {
                     sh "make unit-test"
                 }
