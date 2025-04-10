@@ -19,7 +19,7 @@ DOCKER_BUILDER_CONTAINER?=${DOCKER_BUILDER_TAG}
 DOCKER_RUN_MAKE_TARGETS?=run
 TIMESTAMP?=$(call getTimestamp)
 
-default: clean build test pack-beta nuget-check
+default: clean deps build test pack-beta nuget-check
 
 deps:
 	dotnet tool install -g dotnet-reportgenerator-globaltool
@@ -36,7 +36,7 @@ restore:
 build: restore
 	dotnet build "${BUILD_SLN}"
 
-test: build unit-test
+test: unit-test
 
 unit-test:
 	rm -rf "${BUILD_TEST_RESULTS_DIR}"
