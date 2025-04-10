@@ -5,8 +5,8 @@ helper.loadNuGetProjectDefaults('jaytwo.DistributedLocks')
 def nuGetCredentialsId = 'nuget-org-jaytwo'
 
 helper.run('linux && make && docker', {
-    def timestamp = getTimestamp()
-    def safeJobName = getSafeJobName()
+    def timestamp = helper.getTimestamp()
+    def safeJobName = helper.getSafeJobName()
     def dockerLocalTag = "jenkins__${safeJobName}__${timestamp}"
     def dockerBuilderTag = dockerLocalTag + "__builder"
     def dockerComposeProjectName = dockerLocalTag + "__testernet"
