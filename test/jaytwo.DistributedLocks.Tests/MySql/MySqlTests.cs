@@ -42,53 +42,71 @@ public class MySqlTests : IClassFixture<MySqlTestFixture>
         Assert.Equal(System.Data.ConnectionState.Open, connection.State);
     }
 
-    [Fact]
-    public async Task CanAcquireLockAsync()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public async Task CanAcquireLockAsync(int waitSeconds)
     {
         // arrange
         var key = Guid.NewGuid().ToString();
 
         // act
-        using (var firstLock = await _lockFactory.CreateLockAsync(key))
+        using (var firstLock = await _lockFactory.CreateLockAsync(key, TimeSpan.FromSeconds(waitSeconds)))
         {
             // assert
             Assert.True(firstLock.IsAcquired);
         }
     }
 
-    [Fact]
-    public async Task DisposingLockReleasesKey()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public async Task DisposingLockReleasesKey(int waitSeconds)
     {
         // Arrange
         var key = Guid.NewGuid().ToString();
-
-        using (var firstLock = await _lockFactory.CreateLockAsync(key))
-        {
-        }
+        bool firstLockAcquired;
+        bool secondLockAcquired;
 
         // Act
-        using (var secondtLock = await _lockFactory.CreateLockAsync(key, TimeSpan.FromSeconds(2)))
+        using (var firstLock = await _lockFactory.CreateLockAsync(key, TimeSpan.FromSeconds(waitSeconds)))
         {
-            // Assert
-            Assert.True(secondtLock.IsAcquired);
+            firstLockAcquired = firstLock.IsAcquired;
         }
+
+        using (var secondtLock = await _lockFactory.CreateLockAsync(key, TimeSpan.FromSeconds(waitSeconds)))
+        {
+            secondLockAcquired = secondtLock.IsAcquired;
+        }
+
+        // Assert
+        Assert.True(firstLockAcquired);
+        Assert.True(secondLockAcquired);
     }
 
-    [Fact]
-    public async Task AcquiredLockBlocksAnotherLockAsync()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public async Task AcquiredLockBlocksAnotherLockAsync(int waitSeconds)
     {
         // Arrange
         var key = Guid.NewGuid().ToString();
+        bool firstLockAcquired;
+        bool secondLockAcquired;
 
-        using (var firstLock = await _lockFactory.CreateLockAsync(key))
+        // Act
+        using (var firstLock = await _lockFactory.CreateLockAsync(key, TimeSpan.FromSeconds(waitSeconds)))
         {
-            // Act
-            using (var secondLock = await _lockFactory.CreateLockAsync(key, TimeSpan.FromSeconds(1)))
+            firstLockAcquired = firstLock.IsAcquired;
+
+            using (var secondLockWait = await _lockFactory.CreateLockAsync(key, TimeSpan.FromSeconds(waitSeconds)))
             {
-                // Assert
-                Assert.True(firstLock.IsAcquired);
-                Assert.False(secondLock.IsAcquired);
+                secondLockAcquired = secondLockWait.IsAcquired;
             }
         }
+
+        // Assert
+        Assert.True(firstLockAcquired);
+        Assert.False(secondLockAcquired);
     }
 }

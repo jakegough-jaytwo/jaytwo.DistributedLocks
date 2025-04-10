@@ -48,7 +48,7 @@ public class PostgresDistributedLockFactory : IDistributedLockFactory
 
         if (timeout.HasValue && timeout.Value == TimeSpan.Zero)
         {
-            return await PgAdvisoryXactLock(hashedKey, cancellationToken);
+            return await PgTryAdvisoryLock(hashedKey, cancellationToken);
         }
         else
         {
@@ -159,9 +159,9 @@ public class PostgresDistributedLockFactory : IDistributedLockFactory
         }
     }
 
-    private async Task<IDistributedLock> PgAdvisoryXactLock(uint hashedKey, CancellationToken cancellationToken)
+    private async Task<IDistributedLock> PgTryAdvisoryLock(uint hashedKey, CancellationToken cancellationToken)
     {
-        string query = $"SELECT pg_advisory_xact_lock({hashedKey})";
+        string query = $"SELECT pg_try_advisory_lock({hashedKey})";
 
         bool acquired = false;
         var connection = _connectionFactory.Invoke();

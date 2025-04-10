@@ -1,8 +1,5 @@
 using System;
 using System.Threading.Tasks;
-using jaytwo.DistributedLocks.MySql;
-using jaytwo.DistributedLocks.Postgres;
-using MySql.Data.MySqlClient;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -11,22 +8,23 @@ namespace jaytwo.DistributedLocks.Tests.Postgres;
 
 public class PostgresTests : IClassFixture<PostgresTestFixture>
 {
-    private readonly PostgresTestFixture _fixture;
     private readonly ITestOutputHelper _output;
+    private readonly string _connectionString;
+    private readonly IDistributedLockFactory _lockFactory;
 
     public PostgresTests(PostgresTestFixture fixture, ITestOutputHelper output)
     {
-        _fixture = fixture;
+        _lockFactory = fixture.LockFactory;
+        _connectionString = fixture.ConnectionString;
         _output = output;
     }
 
     [Fact]
     public void ConnectionStringHasDetails()
     {
-        var connectionString = _fixture.ConnectionString;
-        var connectionStringBuilder = new NpgsqlConnectionStringBuilder(connectionString!);
+        _output.WriteLine("Connection Sring: " + _connectionString);
 
-        _output.WriteLine("Connection Sring: " + connectionString);
+        var connectionStringBuilder = new NpgsqlConnectionStringBuilder(_connectionString!);
 
         Assert.NotNull(connectionStringBuilder.Host);
         Assert.NotNull(connectionStringBuilder.Database);
@@ -37,63 +35,78 @@ public class PostgresTests : IClassFixture<PostgresTestFixture>
     [Fact]
     public async Task CanConnect()
     {
-        using var connection = _fixture.CreateConnection();
+        using var connection = new NpgsqlConnection(_connectionString);
 
         await connection.OpenAsync();
 
         Assert.Equal(System.Data.ConnectionState.Open, connection.State);
     }
 
-    [Fact]
-    public async Task CanAcquireLockAsync()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public async Task CanAcquireLockAsync(int waitSeconds)
     {
         // arrange
         var key = Guid.NewGuid().ToString();
-        using var factory = _fixture.LockFactory;
 
         // act
-        using (var firstLock = await factory.CreateLockAsync(key))
+        using (var firstLock = await _lockFactory.CreateLockAsync(key, TimeSpan.FromSeconds(waitSeconds)))
         {
             // assert
             Assert.True(firstLock.IsAcquired);
         }
     }
 
-    [Fact]
-    public async Task DisposingLockReleasesKey()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public async Task DisposingLockReleasesKey(int waitSeconds)
     {
         // Arrange
         var key = Guid.NewGuid().ToString();
-        using var factory = _fixture.LockFactory;
-
-        using (var firstLock = await factory.CreateLockAsync(key))
-        {
-        }
+        bool firstLockAcquired;
+        bool secondLockAcquired;
 
         // Act
-        using (var secondtLock = await factory.CreateLockAsync(key, TimeSpan.FromSeconds(2)))
+        using (var firstLock = await _lockFactory.CreateLockAsync(key, TimeSpan.FromSeconds(waitSeconds)))
         {
-            // Assert
-            Assert.True(secondtLock.IsAcquired);
+            firstLockAcquired = firstLock.IsAcquired;
         }
+
+        using (var secondtLock = await _lockFactory.CreateLockAsync(key, TimeSpan.FromSeconds(waitSeconds)))
+        {
+            secondLockAcquired = secondtLock.IsAcquired;
+        }
+
+        // Assert
+        Assert.True(firstLockAcquired);
+        Assert.True(secondLockAcquired);
     }
 
-    [Fact]
-    public async Task AcquiredLockBlocksAnotherLockAsync()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public async Task AcquiredLockBlocksAnotherLockAsync(int waitSeconds)
     {
         // Arrange
         var key = Guid.NewGuid().ToString();
-        using var factory = _fixture.LockFactory;
+        bool firstLockAcquired;
+        bool secondLockAcquired;
 
-        using (var firstLock = await factory.CreateLockAsync(key))
+        // Act
+        using (var firstLock = await _lockFactory.CreateLockAsync(key, TimeSpan.FromSeconds(waitSeconds)))
         {
-            // Act
-            using (var secondLock = await factory.CreateLockAsync(key, TimeSpan.FromSeconds(1)))
+            firstLockAcquired = firstLock.IsAcquired;
+
+            using (var secondLockWait = await _lockFactory.CreateLockAsync(key, TimeSpan.FromSeconds(waitSeconds)))
             {
-                // Assert
-                Assert.True(firstLock.IsAcquired);
-                Assert.False(secondLock.IsAcquired);
+                secondLockAcquired = secondLockWait.IsAcquired;
             }
         }
+
+        // Assert
+        Assert.True(firstLockAcquired);
+        Assert.False(secondLockAcquired);
     }
 }
