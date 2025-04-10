@@ -16,32 +16,33 @@ internal static class MiniDapper
         }
     }
 
-    public static DbCommand CreateCommand(this DbConnection connection, string query, int? timeoutSeconds = default)
+    public static DbCommand CreateCommand(this DbConnection connection, string query, int? timeoutSeconds = default, DbTransaction? transaction = default)
     {
         var command = connection.CreateCommand();
         command.CommandText = query;
         command.CommandTimeout = timeoutSeconds ?? command.CommandTimeout;
+        command.Transaction = transaction;
 
         return command;
     }
 
-    public static async Task<int> ExecuteNonQueryAsync(this DbConnection connection, string query, int? timeoutSeconds = default, CancellationToken cancellationToken = default)
+    public static async Task<int> ExecuteNonQueryAsync(this DbConnection connection, string query, int? timeoutSeconds = default, DbTransaction? transaction = default, CancellationToken cancellationToken = default)
     {
-        using var command = connection.CreateCommand(query, timeoutSeconds);
+        using var command = connection.CreateCommand(query, timeoutSeconds, transaction);
         await InitOpenConnectionAsync(connection, cancellationToken);
         return await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public static async Task<object?> ExecuteScalarAsync(this DbConnection connection, string query, int? timeoutSeconds = default, CancellationToken cancellationToken = default)
+    public static async Task<object?> ExecuteScalarAsync(this DbConnection connection, string query, int? timeoutSeconds = default, DbTransaction? transaction = default, CancellationToken cancellationToken = default)
     {
-        using var command = connection.CreateCommand(query, timeoutSeconds);
         await InitOpenConnectionAsync(connection, cancellationToken);
+        using var command = connection.CreateCommand(query, timeoutSeconds, transaction);
         return await command.ExecuteScalarAsync(cancellationToken);
     }
 
-    public static async Task<T?> ExecuteScalarAsync<T>(this DbConnection connection, string query, int? timeoutSeconds = default, CancellationToken cancellationToken = default)
+    public static async Task<T?> ExecuteScalarAsync<T>(this DbConnection connection, string query, int? timeoutSeconds = default, DbTransaction? transaction = default, CancellationToken cancellationToken = default)
     {
-        var result = await ExecuteScalarAsync(connection, query, timeoutSeconds, cancellationToken);
+        var result = await ExecuteScalarAsync(connection, query, timeoutSeconds, transaction, cancellationToken);
 
         // TODO: better type conversion
         if (result == null || result == DBNull.Value)

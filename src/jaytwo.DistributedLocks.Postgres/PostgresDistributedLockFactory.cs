@@ -22,7 +22,7 @@ public class PostgresDistributedLockFactory : IDistributedLockFactory
     }
 
     public PostgresDistributedLockFactory(string instanceKey, string connectionString, TimeSpan? defaultWaitTime = default)
-        : this(instanceKey, () => CreateConnection(connectionString), defaultWaitTime)
+        : this(instanceKey, () => new NpgsqlConnection(connectionString), defaultWaitTime)
     {
     }
 
@@ -110,40 +110,21 @@ public class PostgresDistributedLockFactory : IDistributedLockFactory
         return BitConverter.ToUInt32(hashBytes, 0);
     }
 
-    private static NpgsqlConnection CreateConnection(string connectionString)
-    {
-        var connectionStringWithPoolingDisabled = GetConnectionStringWithPoolingDisabled(connectionString);
-        return new NpgsqlConnection(connectionStringWithPoolingDisabled);
-    }
-
-    private static string GetConnectionStringWithPoolingDisabled(string connectionString)
-    {
-        var builder = new NpgsqlConnectionStringBuilder(connectionString);
-        builder.Pooling = false;
-        return builder.ToString();
-    }
-
-    private static void EnsureConnectionPoolingDisabled(NpgsqlConnection connection)
-    {
-        var builder = new NpgsqlConnectionStringBuilder(connection.ConnectionString);
-        if (builder.Pooling)
-        {
-            throw new InvalidOperationException("Connection pooling is enabled. Please disable pooling for advisory locks to work correctly.");
-        }
-    }
-
     private async Task<IDistributedLock> PgAdvisoryLock(uint hashedKey, int timeoutSeconds, CancellationToken cancellationToken)
     {
-        string query = $"SELECT pg_advisory_lock({hashedKey})";
+        string query = $"SELECT pg_advisory_xact_lock({hashedKey})";
 
         bool acquired = false;
         var connection = _connectionFactory.Invoke();
+        NpgsqlTransaction? transaction = null;
         try
         {
-            EnsureConnectionPoolingDisabled(connection);
-            await connection.ExecuteNonQueryAsync(query, timeoutSeconds, cancellationToken);
+            await connection.InitOpenConnectionAsync(cancellationToken);
+            transaction = await connection.BeginTransactionAsync(cancellationToken);
+
+            await connection.ExecuteNonQueryAsync(query, timeoutSeconds, transaction: transaction, cancellationToken: cancellationToken);
             acquired = true;
-            return new PostgresDistributedLock(connection);
+            return new PostgresDistributedLock(connection, transaction);
         }
         catch (NpgsqlException ex) when (ex.InnerException is TimeoutException)
         {
@@ -154,6 +135,11 @@ public class PostgresDistributedLockFactory : IDistributedLockFactory
         {
             if (!acquired)
             {
+                if (transaction != null)
+                {
+                    await transaction.DisposeAsync();
+                }
+
                 await connection.DisposeAsync();
             }
         }
@@ -161,24 +147,32 @@ public class PostgresDistributedLockFactory : IDistributedLockFactory
 
     private async Task<IDistributedLock> PgTryAdvisoryLock(uint hashedKey, CancellationToken cancellationToken)
     {
-        string query = $"SELECT pg_try_advisory_lock({hashedKey})";
+        string query = $"SELECT pg_try_advisory_xact_lock({hashedKey})";
 
         bool acquired = false;
         var connection = _connectionFactory.Invoke();
+        NpgsqlTransaction? transaction = null;
 
         try
         {
-            EnsureConnectionPoolingDisabled(connection);
+            await connection.InitOpenConnectionAsync(cancellationToken);
+            transaction = await connection.BeginTransactionAsync(cancellationToken);
+
             acquired = await connection.ExecuteScalarAsync<bool>(query, cancellationToken: cancellationToken);
             if (acquired)
             {
-                return new PostgresDistributedLock(connection);
+                return new PostgresDistributedLock(connection, transaction);
             }
         }
         finally
         {
             if (!acquired)
             {
+                if (transaction != null)
+                {
+                    await transaction.DisposeAsync();
+                }
+
                 await connection.DisposeAsync();
             }
         }
