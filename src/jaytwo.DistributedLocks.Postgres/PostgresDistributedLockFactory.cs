@@ -16,43 +16,43 @@ public class PostgresDistributedLockFactory : IDistributedLockFactory
     // TODO: test instance keys
     // TODO: organize timeouts (do we really want a timespan? postgres and mysql both only use full seconds)
 
-    public PostgresDistributedLockFactory(string connectionString, TimeSpan? defaultTimeout = default)
-        : this(Guid.NewGuid().ToString(), connectionString, defaultTimeout)
+    public PostgresDistributedLockFactory(string connectionString, TimeSpan? defaultWaitTime = default)
+        : this(Guid.NewGuid().ToString(), connectionString, defaultWaitTime)
     {
     }
 
-    public PostgresDistributedLockFactory(string instanceKey, string connectionString, TimeSpan? defaultTimeout = default)
-        : this(instanceKey, () => CreateConnection(connectionString), defaultTimeout)
+    public PostgresDistributedLockFactory(string instanceKey, string connectionString, TimeSpan? defaultWaitTime = default)
+        : this(instanceKey, () => CreateConnection(connectionString), defaultWaitTime)
     {
     }
 
-    public PostgresDistributedLockFactory(Func<NpgsqlConnection> connectionFactory, TimeSpan? defaultTimeout = default)
-        : this(Guid.NewGuid().ToString(), connectionFactory, defaultTimeout)
+    public PostgresDistributedLockFactory(Func<NpgsqlConnection> connectionFactory, TimeSpan? defaultWaitTime = default)
+        : this(Guid.NewGuid().ToString(), connectionFactory, defaultWaitTime)
     {
     }
 
-    public PostgresDistributedLockFactory(string instanceKey, Func<NpgsqlConnection> connectionFactory, TimeSpan? defaultTimeout = default)
+    public PostgresDistributedLockFactory(string instanceKey, Func<NpgsqlConnection> connectionFactory, TimeSpan? defaultWaitTime = default)
     {
         _connectionFactory = connectionFactory;
-        DefaultTimeout = defaultTimeout ?? TimeSpan.FromSeconds(30);
+        DefaultWaitTime = defaultWaitTime ?? TimeSpan.FromSeconds(30);
         InstanceKey = instanceKey;
     }
 
-    public TimeSpan DefaultTimeout { get; set; }
+    public TimeSpan DefaultWaitTime { get; set; }
 
     private string InstanceKey { get; }
 
-    public async Task<IDistributedLock> CreateLockAsync(string key, TimeSpan? timeout = default, CancellationToken cancellationToken = default)
+    public async Task<IDistributedLock> CreateLockAsync(string key, TimeSpan? waitTime = default, CancellationToken cancellationToken = default)
     {
         var hashedKey = HashStringToUInt($"{key}.{InstanceKey}");
 
-        if (timeout.HasValue && timeout.Value == TimeSpan.Zero)
+        if (waitTime.HasValue && waitTime.Value == TimeSpan.Zero)
         {
             return await PgTryAdvisoryLock(hashedKey, cancellationToken);
         }
         else
         {
-            var timeoutSeconds = (int)(timeout?.TotalSeconds ?? DefaultTimeout.TotalSeconds);
+            var timeoutSeconds = (int)(waitTime?.TotalSeconds ?? DefaultWaitTime.TotalSeconds);
             return await PgAdvisoryLock(hashedKey, timeoutSeconds, cancellationToken);
         }
     }

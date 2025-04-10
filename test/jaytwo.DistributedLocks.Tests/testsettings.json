@@ -2,7 +2,6 @@
   "ConnectionStrings": {
     "PostgresDb": "server=localhost;port=55432;database=pgdb;uid=pguser;pwd=pgpass",
     "MySqlDb": "server=localhost;port=53306;database=mydb;uid=myuser;pwd=mypass",
-    "Redis": "localhost:56379,serviceName=redservice",
-    "RedisPassword": "redpass"
+    "Redis": "localhost:56379,serviceName=redservice,password=redpass"
   }
 }

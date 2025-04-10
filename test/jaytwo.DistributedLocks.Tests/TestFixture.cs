@@ -2,14 +2,12 @@ using System.IO;
 using jaytwo.DistributedLocks.MySql;
 using jaytwo.DistributedLocks.Postgres;
 using Microsoft.Extensions.Configuration;
-using MySql.Data.MySqlClient;
-using Npgsql;
 
-namespace jaytwo.DistributedLocks.Tests.MySql;
+namespace jaytwo.DistributedLocks.Tests;
 
-public class MySqlTestFixture
+public class TestFixture
 {
-    public MySqlTestFixture()
+    public TestFixture()
     {
         var assmeblyLocation = GetType().Assembly.Location;
         var basePath = new FileInfo(assmeblyLocation!).Directory!.FullName;
@@ -19,16 +17,18 @@ public class MySqlTestFixture
             .AddJsonFile("testsettings.json")
             .Build();
 
-        ConnectionString = Configuration.GetConnectionString("MySqlDb")!;
-        LockFactory = new MySqlDistributedLockFactory(ConnectionString);
+        PostgresConnectionString = Configuration.GetConnectionString("PostgresDb")!;
+
+        MySqlConnectionString = Configuration.GetConnectionString("MySqlDb")!;
+
+        RedisConnectionString = Configuration.GetConnectionString("Redis")!;
     }
 
     public IConfiguration Configuration { get; }
 
-    public string ConnectionString { get; }
+    public string PostgresConnectionString { get; }
 
-    public MySqlDistributedLockFactory LockFactory { get; }
+    public string MySqlConnectionString { get; }
 
-    public MySqlConnection CreateConnection()
-        => new MySqlConnection(ConnectionString);
+    public string RedisConnectionString { get; }
 }

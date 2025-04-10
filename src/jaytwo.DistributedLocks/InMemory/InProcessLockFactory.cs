@@ -15,10 +15,10 @@ public class InProcessLockFactory : IDistributedLockFactory
     public InProcessLockFactory(string instanceKey, TimeSpan? defaultTimeout = default)
     {
         InstanceKey = instanceKey;
-        DefaultTimeout = defaultTimeout ?? TimeSpan.FromSeconds(30);
+        DefaultWaitTime = defaultTimeout ?? TimeSpan.FromSeconds(30);
     }
 
-    public TimeSpan DefaultTimeout { get; set; }
+    public TimeSpan DefaultWaitTime { get; set; }
 
     private string InstanceKey { get; }
 
@@ -32,7 +32,7 @@ public class InProcessLockFactory : IDistributedLockFactory
         var semaphore = new Semaphore(1, 1, semaphoreKey);
         try
         {
-            if (semaphore.WaitOne(timeout ?? DefaultTimeout))
+            if (semaphore.WaitOne(timeout ?? DefaultWaitTime))
             {
                 return new InProcessLock(true, semaphore);
             }

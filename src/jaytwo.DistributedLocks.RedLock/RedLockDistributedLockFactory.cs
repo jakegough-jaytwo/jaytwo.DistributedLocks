@@ -10,26 +10,32 @@ public class RedLockDistributedLockFactory : IDistributedLockFactory
 {
     private global::RedLockNet.IDistributedLockFactory _redLockFactory;
 
-    public RedLockDistributedLockFactory(global::RedLockNet.IDistributedLockFactory redLockFactory, TimeSpan? defaultTimeout = default)
-        : this(Guid.NewGuid().ToString(), redLockFactory, defaultTimeout)
+    public RedLockDistributedLockFactory(RedLockNet.IDistributedLockFactory redLockFactory, TimeSpan? defaultWaitTime = default)
+        : this(Guid.NewGuid().ToString(), redLockFactory, defaultWaitTime)
     {
     }
 
-    public RedLockDistributedLockFactory(string instanceKey, global::RedLockNet.IDistributedLockFactory redLockFactory, TimeSpan? defaultTimeout = default)
+    public RedLockDistributedLockFactory(string instanceKey, RedLockNet.IDistributedLockFactory redLockFactory, TimeSpan? defaultWaitTime = default)
     {
         _redLockFactory = redLockFactory;
-        DefaultTimeout = defaultTimeout ?? TimeSpan.FromSeconds(30);
+        DefaultWaitTime = defaultWaitTime ?? TimeSpan.FromSeconds(30);
         InstanceKey = instanceKey;
     }
 
-    public TimeSpan DefaultTimeout { get; set; }
+    public TimeSpan DefaultWaitTime { get; set; }
 
     private string InstanceKey { get; }
 
-    public async Task<IDistributedLock> CreateLockAsync(string key, TimeSpan? timeout = default, CancellationToken cancellationToken = default)
+    public async Task<IDistributedLock> CreateLockAsync(string key, TimeSpan? waitTime = default, CancellationToken cancellationToken = default)
     {
         var redLockKey = $"{key}.{InstanceKey}";
-        var redLock = await _redLockFactory.CreateLockAsync(redLockKey, timeout ?? DefaultTimeout); // TODO: other params
+        var redLock = await _redLockFactory.CreateLockAsync(
+            resource: redLockKey,
+            expiryTime: TimeSpan.FromSeconds(60),
+            waitTime: waitTime ?? DefaultWaitTime,
+            retryTime: TimeSpan.FromSeconds(3),
+            cancellationToken: cancellationToken);
+
         if (redLock.IsAcquired)
         {
             return new RedLockDistributedLock(redLock);

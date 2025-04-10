@@ -13,36 +13,36 @@ public class MySqlDistributedLockFactory : IDistributedLockFactory
 {
     private Func<MySqlConnection> _connectionFactory;
 
-    public MySqlDistributedLockFactory(string connectionString, TimeSpan? defaultTimeout = default)
-        : this(Guid.NewGuid().ToString(), connectionString, defaultTimeout)
+    public MySqlDistributedLockFactory(string connectionString, TimeSpan? defaultWaitTime = default)
+        : this(Guid.NewGuid().ToString(), connectionString, defaultWaitTime)
     {
     }
 
-    public MySqlDistributedLockFactory(string instanceKey, string connectionString, TimeSpan? defaultTimeout = default)
-        : this(instanceKey, () => CreateConnection(connectionString), defaultTimeout)
+    public MySqlDistributedLockFactory(string instanceKey, string connectionString, TimeSpan? defaultWaitTime = default)
+        : this(instanceKey, () => CreateConnection(connectionString), defaultWaitTime)
     {
     }
 
-    public MySqlDistributedLockFactory(Func<MySqlConnection> connectionFactory, TimeSpan? defaultTimeout = default)
-        : this(Guid.NewGuid().ToString(), connectionFactory, defaultTimeout)
+    public MySqlDistributedLockFactory(Func<MySqlConnection> connectionFactory, TimeSpan? defaultWaitTime = default)
+        : this(Guid.NewGuid().ToString(), connectionFactory, defaultWaitTime)
     {
     }
 
-    public MySqlDistributedLockFactory(string instanceKey, Func<MySqlConnection> connectionFactory, TimeSpan? defaultTimeout = default)
+    public MySqlDistributedLockFactory(string instanceKey, Func<MySqlConnection> connectionFactory, TimeSpan? defaultWaitTime = default)
     {
         _connectionFactory = connectionFactory;
-        DefaultTimeout = defaultTimeout ?? TimeSpan.FromSeconds(30);
+        DefaultWaitTime = defaultWaitTime ?? TimeSpan.FromSeconds(30);
         InstanceKey = instanceKey;
     }
 
-    public TimeSpan DefaultTimeout { get; set; }
+    public TimeSpan DefaultWaitTime { get; set; }
 
     private string InstanceKey { get; }
 
-    public async Task<IDistributedLock> CreateLockAsync(string key, TimeSpan? timeout = default, CancellationToken cancellationToken = default)
+    public async Task<IDistributedLock> CreateLockAsync(string key, TimeSpan? waitTime = default, CancellationToken cancellationToken = default)
     {
         var hashedKey = HashStringToUInt($"{key}.{InstanceKey}");
-        var effectiveTimeout = timeout ?? DefaultTimeout;
+        var effectiveTimeout = waitTime ?? DefaultWaitTime;
 
         string query = $"SELECT GET_LOCK('{hashedKey}', {effectiveTimeout.TotalSeconds})";
 
