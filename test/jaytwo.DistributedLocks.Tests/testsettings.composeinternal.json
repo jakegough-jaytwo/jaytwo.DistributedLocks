@@ -1,0 +1,7 @@
+{
+  "ConnectionStrings": {
+    "PostgresDb": "server=postgres;port=5432;database=pgdb;uid=pguser;pwd=pgpass",
+    "MySqlDb": "server=mysql;port=3306;database=mydb;uid=myuser;pwd=mypass",
+    "Redis": "redis:6379,serviceName=redservice,password=redpass"
+  }
+}

@@ -2,13 +2,12 @@ services:
 
   postgres:
     image: postgres:latest
-    restart: always
+    expose:
+      - "5432"
     environment:
       POSTGRES_USER: pguser
       POSTGRES_PASSWORD: pgpass
       POSTGRES_DB: pgdb
-    ports:
-      - 55432:5432
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -17,15 +16,14 @@ services:
 
   mysql:
     image: mysql:latest
-    restart: always
+    expose:
+      - "3306"
     command: --bind-address=0.0.0.0
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: mydb
       MYSQL_USER: myuser
       MYSQL_PASSWORD: mypass
-    ports:
-      - "53306:3306"
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$$MYSQL_ROOT_PASSWORD"]
       interval: 5s
@@ -34,12 +32,28 @@ services:
 
   redis:
     image: redis:latest
-    restart: always
+    expose:
+      - "6379"
     command: redis-server --requirepass redpass
-    ports:
-      - "56379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "redpass", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
+
+  tester:
+    build: .
+    environment:
+      TEST_ENV: composeinternal
+    # command: [ "/bin/sh", "-c", "echo $$TEST_ENV" ]
+    command: "make test"
+    # command: [ "/bin/sh", "-c", "make test" ]
+    # command: "echo $$TEST_ENV"
+    # command: [ "/bin/sh", "-c", "ping redis" ]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy

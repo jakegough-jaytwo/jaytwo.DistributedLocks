@@ -94,6 +94,15 @@ nuget-push:
 		fi; \
 	done
 
+docker-tester-clean:
+	docker compose --profile "*" down -v --remove-orphans
+
+docker-tester-build: docker-tester-clean
+	docker compose --profile "*" up --no-start --build
+
+docker-tester:
+	docker compose run --rm tester
+
 docker-builder:
 	# building the base image to force caching those layers in an otherwise discarded stage of the multistage dockerfile
 	docker build -t ${DOCKER_BASE_TAG} . --target base --pull

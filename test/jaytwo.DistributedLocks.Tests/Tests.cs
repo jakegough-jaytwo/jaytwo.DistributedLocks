@@ -3,26 +3,20 @@ using Xunit.Abstractions;
 
 namespace jaytwo.DistributedLocks.Tests;
 
-public class Tests
+public class Tests : IClassFixture<TestFixture>
 {
+    private readonly TestFixture _fixture;
     private readonly ITestOutputHelper _output;
 
-    public Tests(ITestOutputHelper output)
+    public Tests(TestFixture fixture, ITestOutputHelper output)
     {
+        _fixture = fixture;
         _output = output;
-    }
-
-    [Theory]
-    [InlineData("Hello")]
-    [InlineData("World")]
-    public void HelloWorldTheory(string value)
-    {
-        _output.WriteLine(value);
     }
 
     [Fact]
     public void HelloWorld()
     {
-        _output.WriteLine("hello wortld");
+        _output.WriteLine("Test Environment: " + _fixture.TestEnvironment);
     }
 }

@@ -5,10 +5,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Resources\*" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\..\src\jaytwo.DistributedLocks\jaytwo.DistributedLocks.csproj" />
     <ProjectReference Include="..\..\src\jaytwo.DistributedLocks.MySql\jaytwo.DistributedLocks.MySql.csproj" />
     <ProjectReference Include="..\..\src\jaytwo.DistributedLocks.Postgres\jaytwo.DistributedLocks.Postgres.csproj" />
@@ -21,7 +17,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="testsettings.json">
+    <EmbeddedResource Include="Resources\*" />
+    <None Update="testsettings.*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
