@@ -1,5 +1,3 @@
-using System;
-
 namespace jaytwo.DistributedLocks;
 
 public interface IDistributedLock : IDisposable, IAsyncDisposable

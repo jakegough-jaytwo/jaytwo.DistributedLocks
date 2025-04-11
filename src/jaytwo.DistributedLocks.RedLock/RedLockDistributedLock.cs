@@ -1,4 +1,3 @@
-using System.Threading.Tasks;
 using RedLockNet;
 
 namespace jaytwo.DistributedLocks.RedLock;

@@ -1,8 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
-
 namespace jaytwo.DistributedLocks.InMemory;
 
 public class InProcessLockFactory : IDistributedLockFactory
@@ -57,9 +52,7 @@ public class InProcessLockFactory : IDistributedLockFactory
     }
 
     public ValueTask DisposeAsync()
-#if NET6_0_OR_GREATER
-        => ValueTask.CompletedTask;
-#else
-        => default;
-#endif
+    {
+        return default;
+    }
 }

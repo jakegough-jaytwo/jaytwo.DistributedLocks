@@ -1,5 +1,3 @@
-using System;
-using System.Threading.Tasks;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;

@@ -1,7 +1,3 @@
-using System;
-using System.IO;
-using jaytwo.DistributedLocks.MySql;
-using jaytwo.DistributedLocks.Postgres;
 using Microsoft.Extensions.Configuration;
 
 namespace jaytwo.DistributedLocks.Tests;

@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using jaytwo.DistributedLocks.MySql;
 using jaytwo.DistributedLocks.Postgres;
 using jaytwo.DistributedLocks.RedLock;

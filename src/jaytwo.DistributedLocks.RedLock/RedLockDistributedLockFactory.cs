@@ -1,9 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-
 namespace jaytwo.DistributedLocks.RedLock;
 
 public class RedLockDistributedLockFactory : IDistributedLockFactory
@@ -66,9 +60,7 @@ public class RedLockDistributedLockFactory : IDistributedLockFactory
     }
 
     public ValueTask DisposeAsync()
-#if NET6_0_OR_GREATER
-        => ValueTask.CompletedTask;
-#else
-        => default;
-#endif
+    {
+        return default;
+    }
 }

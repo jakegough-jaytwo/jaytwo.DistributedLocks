@@ -1,6 +1,3 @@
-using System.Threading;
-using System.Threading.Tasks;
-
 namespace jaytwo.DistributedLocks.InMemory;
 
 public class InProcessLock : IDistributedLock
@@ -24,11 +21,6 @@ public class InProcessLock : IDistributedLock
     public ValueTask DisposeAsync()
     {
         Dispose();
-
-#if NET6_0_OR_GREATER
-        return ValueTask.CompletedTask;
-#else
         return default;
-#endif
     }
 }

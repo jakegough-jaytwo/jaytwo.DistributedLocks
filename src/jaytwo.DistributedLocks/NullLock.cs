@@ -1,5 +1,3 @@
-using System.Threading.Tasks;
-
 namespace jaytwo.DistributedLocks;
 
 public class NullLock : IDistributedLock
@@ -13,9 +11,7 @@ public class NullLock : IDistributedLock
     }
 
     public ValueTask DisposeAsync()
-#if NET6_0_OR_GREATER
-        => ValueTask.CompletedTask;
-#else
-        => default;
-#endif
+    {
+        return default;
+    }
 }

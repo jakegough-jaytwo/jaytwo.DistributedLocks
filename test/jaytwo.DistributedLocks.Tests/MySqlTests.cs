@@ -1,5 +1,3 @@
-using System;
-using System.Threading.Tasks;
 using MySql.Data.MySqlClient;
 using Xunit;
 using Xunit.Abstractions;
