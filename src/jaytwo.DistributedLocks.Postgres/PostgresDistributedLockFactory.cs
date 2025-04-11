@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.Common;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Transactions;
 using Npgsql;
 
 namespace jaytwo.DistributedLocks.Postgres;
@@ -45,14 +47,14 @@ public class PostgresDistributedLockFactory : IDistributedLockFactory
     public async Task<IDistributedLock> CreateLockAsync(string key, TimeSpan? waitTime = default, CancellationToken cancellationToken = default)
     {
         var hashedKey = HashStringToUInt($"{key}.{InstanceKey}");
+        var timeoutSeconds = (int)(waitTime?.TotalSeconds ?? DefaultWaitTime.TotalSeconds);
 
-        if (waitTime.HasValue && waitTime.Value == TimeSpan.Zero)
+        if (timeoutSeconds == 0)
         {
             return await PgTryAdvisoryLock(hashedKey, cancellationToken);
         }
         else
         {
-            var timeoutSeconds = (int)(waitTime?.TotalSeconds ?? DefaultWaitTime.TotalSeconds);
             return await PgAdvisoryLock(hashedKey, timeoutSeconds, cancellationToken);
         }
     }
@@ -110,45 +112,40 @@ public class PostgresDistributedLockFactory : IDistributedLockFactory
         return BitConverter.ToUInt32(hashBytes, 0);
     }
 
-    private async Task<IDistributedLock> PgAdvisoryLock(uint hashedKey, int timeoutSeconds, CancellationToken cancellationToken)
+    private static async Task<bool> PgTryAdvisoryLock(uint hashedKey, NpgsqlConnection connection, NpgsqlTransaction transaction, CancellationToken cancellationToken)
+    {
+        string query = $"SELECT pg_try_advisory_xact_lock({hashedKey})";
+        return await connection.ExecuteScalarAsync<bool>(query, transaction: transaction, cancellationToken: cancellationToken);
+    }
+
+    private static async Task<bool> PgAdvisoryLock(uint hashedKey, int timeoutSeconds, NpgsqlConnection connection, NpgsqlTransaction transaction, CancellationToken cancellationToken)
     {
         string query = $"SELECT pg_advisory_xact_lock({hashedKey})";
-
-        bool acquired = false;
-        var connection = _connectionFactory.Invoke();
-        NpgsqlTransaction? transaction = null;
         try
         {
-            await connection.InitOpenConnectionAsync(cancellationToken);
-            transaction = await connection.BeginTransactionAsync(cancellationToken);
-
-            await connection.ExecuteNonQueryAsync(query, timeoutSeconds, transaction: transaction, cancellationToken: cancellationToken);
-            acquired = true;
-            return new PostgresDistributedLock(connection, transaction);
+            await connection.ExecuteNonQueryAsync(query, transaction: transaction, timeoutSeconds: timeoutSeconds, cancellationToken: cancellationToken);
+            return true;
         }
         catch (NpgsqlException ex) when (ex.InnerException is TimeoutException)
         {
-            acquired = false;
-            return NullLock.Instance;
-        }
-        finally
-        {
-            if (!acquired)
-            {
-                if (transaction != null)
-                {
-                    await transaction.DisposeAsync();
-                }
-
-                await connection.DisposeAsync();
-            }
+            return false;
         }
     }
 
-    private async Task<IDistributedLock> PgTryAdvisoryLock(uint hashedKey, CancellationToken cancellationToken)
-    {
-        string query = $"SELECT pg_try_advisory_xact_lock({hashedKey})";
+    private async Task<IDistributedLock> PgAdvisoryLock(uint hashedKey, int timeoutSeconds, CancellationToken cancellationToken)
+        => await GetAdvisoryLock(
+            (c, t, ct) => PgAdvisoryLock(hashedKey, timeoutSeconds, c, t, ct),
+            cancellationToken);
 
+    private async Task<IDistributedLock> PgTryAdvisoryLock(uint hashedKey, CancellationToken cancellationToken)
+        => await GetAdvisoryLock(
+            (c, t, ct) => PgTryAdvisoryLock(hashedKey, c, t, ct),
+            cancellationToken);
+
+    private async Task<IDistributedLock> GetAdvisoryLock(
+        Func<NpgsqlConnection, NpgsqlTransaction, CancellationToken, Task<bool>> advisoryLockDelegate,
+        CancellationToken cancellationToken)
+    {
         bool acquired = false;
         var connection = _connectionFactory.Invoke();
         NpgsqlTransaction? transaction = null;
@@ -157,8 +154,8 @@ public class PostgresDistributedLockFactory : IDistributedLockFactory
         {
             await connection.InitOpenConnectionAsync(cancellationToken);
             transaction = await connection.BeginTransactionAsync(cancellationToken);
+            acquired = await advisoryLockDelegate(connection, transaction, cancellationToken);
 
-            acquired = await connection.ExecuteScalarAsync<bool>(query, cancellationToken: cancellationToken);
             if (acquired)
             {
                 return new PostgresDistributedLock(connection, transaction);
