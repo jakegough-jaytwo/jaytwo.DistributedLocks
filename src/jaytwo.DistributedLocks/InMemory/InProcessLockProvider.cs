@@ -1,13 +1,13 @@
 namespace jaytwo.DistributedLocks.InMemory;
 
-public class InProcessLockFactory : IDistributedLockFactory
+public class InProcessLockProvider : IDistributedLockProvider
 {
-    public InProcessLockFactory(TimeSpan? defaultTimeout = default)
+    public InProcessLockProvider(TimeSpan? defaultTimeout = default)
         : this(Guid.NewGuid().ToString(), defaultTimeout)
     {
     }
 
-    public InProcessLockFactory(string instanceKey, TimeSpan? defaultTimeout = default)
+    public InProcessLockProvider(string instanceKey, TimeSpan? defaultTimeout = default)
     {
         InstanceKey = instanceKey;
         DefaultWaitTime = defaultTimeout ?? TimeSpan.FromSeconds(30);

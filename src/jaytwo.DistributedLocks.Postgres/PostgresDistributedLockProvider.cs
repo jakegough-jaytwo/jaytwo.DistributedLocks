@@ -5,29 +5,29 @@ using Npgsql;
 
 namespace jaytwo.DistributedLocks.Postgres;
 
-public class PostgresDistributedLockFactory : IDistributedLockFactory
+public class PostgresDistributedLockProvider : IDistributedLockProvider
 {
     private Func<NpgsqlConnection> _connectionFactory;
 
     // TODO: test instance keys
     // TODO: organize timeouts (do we really want a timespan? postgres and mysql both only use full seconds)
 
-    public PostgresDistributedLockFactory(string connectionString, TimeSpan? defaultWaitTime = default)
+    public PostgresDistributedLockProvider(string connectionString, TimeSpan? defaultWaitTime = default)
         : this(Guid.NewGuid().ToString(), connectionString, defaultWaitTime)
     {
     }
 
-    public PostgresDistributedLockFactory(string instanceKey, string connectionString, TimeSpan? defaultWaitTime = default)
+    public PostgresDistributedLockProvider(string instanceKey, string connectionString, TimeSpan? defaultWaitTime = default)
         : this(instanceKey, () => new NpgsqlConnection(connectionString), defaultWaitTime)
     {
     }
 
-    public PostgresDistributedLockFactory(Func<NpgsqlConnection> connectionFactory, TimeSpan? defaultWaitTime = default)
+    public PostgresDistributedLockProvider(Func<NpgsqlConnection> connectionFactory, TimeSpan? defaultWaitTime = default)
         : this(Guid.NewGuid().ToString(), connectionFactory, defaultWaitTime)
     {
     }
 
-    public PostgresDistributedLockFactory(string instanceKey, Func<NpgsqlConnection> connectionFactory, TimeSpan? defaultWaitTime = default)
+    public PostgresDistributedLockProvider(string instanceKey, Func<NpgsqlConnection> connectionFactory, TimeSpan? defaultWaitTime = default)
     {
         _connectionFactory = connectionFactory;
         DefaultWaitTime = defaultWaitTime ?? TimeSpan.FromSeconds(30);

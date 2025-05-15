@@ -5,26 +5,26 @@ using MySql.Data.MySqlClient;
 
 namespace jaytwo.DistributedLocks.MySql;
 
-public class MySqlDistributedLockFactory : IDistributedLockFactory
+public class MySqlDistributedLockProvider : IDistributedLockProvider
 {
     private Func<MySqlConnection> _connectionFactory;
 
-    public MySqlDistributedLockFactory(string connectionString, TimeSpan? defaultWaitTime = default)
+    public MySqlDistributedLockProvider(string connectionString, TimeSpan? defaultWaitTime = default)
         : this(Guid.NewGuid().ToString(), connectionString, defaultWaitTime)
     {
     }
 
-    public MySqlDistributedLockFactory(string instanceKey, string connectionString, TimeSpan? defaultWaitTime = default)
+    public MySqlDistributedLockProvider(string instanceKey, string connectionString, TimeSpan? defaultWaitTime = default)
         : this(instanceKey, () => CreateConnection(connectionString), defaultWaitTime)
     {
     }
 
-    public MySqlDistributedLockFactory(Func<MySqlConnection> connectionFactory, TimeSpan? defaultWaitTime = default)
+    public MySqlDistributedLockProvider(Func<MySqlConnection> connectionFactory, TimeSpan? defaultWaitTime = default)
         : this(Guid.NewGuid().ToString(), connectionFactory, defaultWaitTime)
     {
     }
 
-    public MySqlDistributedLockFactory(string instanceKey, Func<MySqlConnection> connectionFactory, TimeSpan? defaultWaitTime = default)
+    public MySqlDistributedLockProvider(string instanceKey, Func<MySqlConnection> connectionFactory, TimeSpan? defaultWaitTime = default)
     {
         _connectionFactory = connectionFactory;
         DefaultWaitTime = defaultWaitTime ?? TimeSpan.FromSeconds(30);

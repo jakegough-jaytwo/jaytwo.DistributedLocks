@@ -26,7 +26,7 @@ builder.Services.AddScoped(x =>
     var config = x.GetRequiredService<IConfiguration>();
     var connectionString = config["ConnectionStrings:PostgresDb"];
     var connectionFactory = () => new NpgsqlConnection(connectionString);
-    return new PostgresDistributedLockFactory("foo", connectionFactory);
+    return new PostgresDistributedLockProvider("foo", connectionFactory);
 });
 
 builder.Services.AddScoped(x =>
@@ -34,7 +34,7 @@ builder.Services.AddScoped(x =>
     var config = x.GetRequiredService<IConfiguration>();
     var connectionString = config["ConnectionStrings:MySqlDb"];
     var connectionFactory = () => new MySqlConnection(connectionString);
-    return new MySqlDistributedLockFactory("bar", connectionFactory);
+    return new MySqlDistributedLockProvider("bar", connectionFactory);
 });
 
 RedisSetup.ConfigureRedis(builder.Services, "sampleapp");
@@ -42,7 +42,7 @@ builder.Services.AddScoped(x =>
 {
     var config = x.GetRequiredService<IConfiguration>();
     var redLockFactory = x.GetRequiredService<global::RedLockNet.IDistributedLockFactory>();
-    return new RedLockDistributedLockFactory("fizz", redLockFactory);
+    return new RedLockDistributedLockProvider("fizz", redLockFactory);
 });
 
 var app = builder.Build();

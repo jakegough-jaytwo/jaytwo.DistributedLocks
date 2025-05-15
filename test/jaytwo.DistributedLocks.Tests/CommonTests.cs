@@ -6,13 +6,13 @@ namespace jaytwo.DistributedLocks.Tests;
 public class CommonTests : IClassFixture<TestFixture>
 {
     private readonly ITestOutputHelper _output;
-    private readonly DistributedLockFactoryProvider _lockFactoryProvider;
+    private readonly DistributedLockProviderFactory _lockProviders;
 
     public CommonTests(ITestOutputHelper output, TestFixture fixture)
     {
         _output = output;
 
-        _lockFactoryProvider = new DistributedLockFactoryProvider(
+        _lockProviders = new DistributedLockProviderFactory(
             fixture.MySqlConnectionString,
             fixture.PostgresConnectionString,
             fixture.RedisConnectionString);
@@ -31,10 +31,10 @@ public class CommonTests : IClassFixture<TestFixture>
     {
         // arrange
         var key = Guid.NewGuid().ToString();
-        using var lockFactory = _lockFactoryProvider.GetFactory(moniker);
+        using var lockProvider = _lockProviders.GetProvider(moniker);
 
         // act
-        using (var firstLock = await lockFactory.CreateLockAsync(key, TimeSpan.FromSeconds(waitSeconds)))
+        using (var firstLock = await lockProvider.CreateLockAsync(key, TimeSpan.FromSeconds(waitSeconds)))
         {
             // assert
             Assert.True(firstLock.IsAcquired);
@@ -54,17 +54,17 @@ public class CommonTests : IClassFixture<TestFixture>
     {
         // Arrange
         var key = Guid.NewGuid().ToString();
-        using var lockFactory = _lockFactoryProvider.GetFactory(moniker);
+        using var lockProvider = _lockProviders.GetProvider(moniker);
         bool firstLockAcquired;
         bool secondLockAcquired;
 
         // Act
-        using (var firstLock = await lockFactory.CreateLockAsync(key, TimeSpan.FromSeconds(waitSeconds)))
+        using (var firstLock = await lockProvider.CreateLockAsync(key, TimeSpan.FromSeconds(waitSeconds)))
         {
             firstLockAcquired = firstLock.IsAcquired;
         }
 
-        using (var secondtLock = await lockFactory.CreateLockAsync(key, TimeSpan.FromSeconds(waitSeconds)))
+        using (var secondtLock = await lockProvider.CreateLockAsync(key, TimeSpan.FromSeconds(waitSeconds)))
         {
             secondLockAcquired = secondtLock.IsAcquired;
         }
@@ -87,16 +87,16 @@ public class CommonTests : IClassFixture<TestFixture>
     {
         // Arrange
         var key = Guid.NewGuid().ToString();
-        using var lockFactory = _lockFactoryProvider.GetFactory(moniker);
+        using var lockProvider = _lockProviders.GetProvider(moniker);
         bool firstLockAcquired;
         bool secondLockAcquired;
 
         // Act
-        using (var firstLock = await lockFactory.CreateLockAsync(key, TimeSpan.FromSeconds(waitSeconds)))
+        using (var firstLock = await lockProvider.CreateLockAsync(key, TimeSpan.FromSeconds(waitSeconds)))
         {
             firstLockAcquired = firstLock.IsAcquired;
 
-            using (var secondLockWait = await lockFactory.CreateLockAsync(key, TimeSpan.FromSeconds(waitSeconds)))
+            using (var secondLockWait = await lockProvider.CreateLockAsync(key, TimeSpan.FromSeconds(waitSeconds)))
             {
                 secondLockAcquired = secondLockWait.IsAcquired;
             }

@@ -8,34 +8,34 @@ using StackExchange.Redis;
 
 namespace jaytwo.DistributedLocks.Tests;
 
-public class DistributedLockFactoryProvider
+public class DistributedLockProviderFactory
 {
-    private readonly Func<IDistributedLockFactory> _mySqlLockFactory;
-    private readonly Func<IDistributedLockFactory> _postgresLockFactory;
-    private readonly Func<IDistributedLockFactory> _redisLockFactory;
+    private readonly Func<IDistributedLockProvider> _mySqlLockProvider;
+    private readonly Func<IDistributedLockProvider> _postgresLockProvider;
+    private readonly Func<IDistributedLockProvider> _redisLockProvider;
 
-    public DistributedLockFactoryProvider(
+    public DistributedLockProviderFactory(
         string mySqlConnectionString,
         string postgresConnectionString,
         string redisConnectionString)
     {
-        _mySqlLockFactory = () => new MySqlDistributedLockFactory(mySqlConnectionString);
-        _postgresLockFactory = () => new PostgresDistributedLockFactory(postgresConnectionString);
-        _redisLockFactory = () => new RedLockDistributedLockFactory(CreateRedLockDistributedLockFactory(redisConnectionString));
+        _mySqlLockProvider = () => new MySqlDistributedLockProvider(mySqlConnectionString);
+        _postgresLockProvider = () => new PostgresDistributedLockProvider(postgresConnectionString);
+        _redisLockProvider = () => new RedLockDistributedLockProvider(CreateRedLockDistributedLockFactory(redisConnectionString));
     }
 
-    public IDistributedLockFactory GetFactory(string moniker)
+    public IDistributedLockProvider GetProvider(string moniker)
     {
         switch (moniker)
         {
             case Monikers.InMemory:
-                return new InProcessLockFactory(nameof(DistributedLockFactoryProvider));
+                return new InProcessLockProvider(nameof(DistributedLockProviderFactory));
             case Monikers.Postgres:
-                return _postgresLockFactory.Invoke();
+                return _postgresLockProvider.Invoke();
             case Monikers.MySql:
-                return _mySqlLockFactory.Invoke();
+                return _mySqlLockProvider.Invoke();
             case Monikers.RedLock:
-                return _redisLockFactory.Invoke();
+                return _redisLockProvider.Invoke();
             default:
                 throw new NotSupportedException($"Factory type '{moniker}' is not supported.");
         }

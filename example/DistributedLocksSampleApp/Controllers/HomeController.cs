@@ -9,36 +9,36 @@ namespace DistributedLocksSampleApp.Controllers;
 
 public class HomeController : Controller
 {
-    private readonly PostgresDistributedLockFactory _pgLockFactory;
-    private readonly MySqlDistributedLockFactory _myLockFactory;
-    private readonly RedLockDistributedLockFactory _redLockFactory;
+    private readonly PostgresDistributedLockProvider _pgLockProvider;
+    private readonly MySqlDistributedLockProvider _myLockProvider;
+    private readonly RedLockDistributedLockProvider _redLockProvider;
 
     public HomeController(
-        PostgresDistributedLockFactory pgLockFactory,
-        MySqlDistributedLockFactory myLockFactory,
-        RedLockDistributedLockFactory redLockFactory)
+        PostgresDistributedLockProvider pgLockProvider,
+        MySqlDistributedLockProvider myLockProvider,
+        RedLockDistributedLockProvider redLockProvider)
     {
-        _pgLockFactory = pgLockFactory;
-        _myLockFactory = myLockFactory;
-        _redLockFactory = redLockFactory;
+        _pgLockProvider = pgLockProvider;
+        _myLockProvider = myLockProvider;
+        _redLockProvider = redLockProvider;
     }
 
     [Route("/pg/{key}")]
     public async Task PostgresLock(string key)
     {
-        await using var pgLock = await _pgLockFactory.CreateLockAsync(key);
+        await using var pgLock = await _pgLockProvider.CreateLockAsync(key);
     }
 
     [Route("/my/{key}")]
     public async Task MySqlLock(string key)
     {
-        await using var pgLock = await _myLockFactory.CreateLockAsync(key);
+        await using var pgLock = await _myLockProvider.CreateLockAsync(key);
     }
 
     [Route("/red/{key}")]
     public async Task RedlLock(string key)
     {
-        await using var redLock = await _redLockFactory.CreateLockAsync(key);
+        await using var redLock = await _redLockProvider.CreateLockAsync(key);
     }
 
     [Route("/")]
@@ -46,9 +46,9 @@ public class HomeController : Controller
     {
         return new
         {
-            postgres = await HealthCheck.RunHealthCheckAsync(() => _pgLockFactory.HealthCheckAsync()),
-            mysql = await HealthCheck.RunHealthCheckAsync(() => _myLockFactory.HealthCheckAsync()),
-            redLock = await HealthCheck.RunHealthCheckAsync(() => _redLockFactory.HealthCheckAsync()),
+            postgres = await HealthCheck.RunHealthCheckAsync(() => _pgLockProvider.HealthCheckAsync()),
+            mysql = await HealthCheck.RunHealthCheckAsync(() => _myLockProvider.HealthCheckAsync()),
+            redLock = await HealthCheck.RunHealthCheckAsync(() => _redLockProvider.HealthCheckAsync()),
         };
     }
 }

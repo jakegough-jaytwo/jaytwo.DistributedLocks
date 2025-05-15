@@ -1,6 +1,6 @@
 namespace jaytwo.DistributedLocks;
 
-public interface IDistributedLockFactory : IDisposable, IAsyncDisposable
+public interface IDistributedLockProvider : IDisposable, IAsyncDisposable
 {
     TimeSpan DefaultWaitTime { get; set; }
 

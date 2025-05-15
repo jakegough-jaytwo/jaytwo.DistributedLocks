@@ -1,15 +1,15 @@
 namespace jaytwo.DistributedLocks.RedLock;
 
-public class RedLockDistributedLockFactory : IDistributedLockFactory
+public class RedLockDistributedLockProvider : IDistributedLockProvider
 {
     private global::RedLockNet.IDistributedLockFactory _redLockFactory;
 
-    public RedLockDistributedLockFactory(RedLockNet.IDistributedLockFactory redLockFactory, TimeSpan? defaultWaitTime = default)
+    public RedLockDistributedLockProvider(RedLockNet.IDistributedLockFactory redLockFactory, TimeSpan? defaultWaitTime = default)
         : this(Guid.NewGuid().ToString(), redLockFactory, defaultWaitTime)
     {
     }
 
-    public RedLockDistributedLockFactory(string instanceKey, RedLockNet.IDistributedLockFactory redLockFactory, TimeSpan? defaultWaitTime = default)
+    public RedLockDistributedLockProvider(string instanceKey, RedLockNet.IDistributedLockFactory redLockFactory, TimeSpan? defaultWaitTime = default)
     {
         _redLockFactory = redLockFactory;
         DefaultWaitTime = defaultWaitTime ?? TimeSpan.FromSeconds(30);

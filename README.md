@@ -45,7 +45,7 @@ PM> Install-Package jaytwo.DistributedLocks.RedLock      # Redis (RedLock.NET) p
 Locks are automatically released when disposed:
 
 ```csharp
-await using (var myLock = await factory.CreateLockAsync("my-key"))
+await using (var myLock = await provider.CreateLockAsync("my-key"))
 {
     if (!myLock.IsAcquired)
     {
@@ -60,7 +60,7 @@ await using (var myLock = await factory.CreateLockAsync("my-key"))
 ### Set a Custom Wait Timeout
 
 ```csharp
-await using var myLock = await factory.CreateLockAsync("my-key", waitTime: TimeSpan.FromSeconds(5));
+await using var myLock = await provider.CreateLockAsync("my-key", waitTime: TimeSpan.FromSeconds(5));
 ```
 
 ### Health Check
@@ -68,7 +68,7 @@ await using var myLock = await factory.CreateLockAsync("my-key", waitTime: TimeS
 You can check the health of the underlying lock provider. This is useful for monitoring and diagnostics:
 
 ```csharp
-var healthCheckResult = await factory.HealthCheckAsync();
+var healthCheckResult = await provider.HealthCheckAsync();
 ```
 
 ## Background
