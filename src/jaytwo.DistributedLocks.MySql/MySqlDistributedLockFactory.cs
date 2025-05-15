@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Dapper;
 using MySql.Data.MySqlClient;
 
 namespace jaytwo.DistributedLocks.MySql;
@@ -47,7 +48,8 @@ public class MySqlDistributedLockFactory : IDistributedLockFactory
         {
             EnsureConnectionPoolingDisabled(connection);
 
-            acquired = await connection.ExecuteScalarAsync<bool>(query, cancellationToken: cancellationToken);
+            await connection.OpenAsync(cancellationToken); // Dapper automatically closes connections that it automatically opened
+            acquired = await connection.ExecuteScalarAsync<bool>(new CommandDefinition(query, cancellationToken: cancellationToken));
 
             if (acquired)
             {
@@ -81,7 +83,7 @@ public class MySqlDistributedLockFactory : IDistributedLockFactory
 
         try
         {
-            var nowTime = await connection.ExecuteScalarAsync<DateTime>("SELECT now(6)", cancellationToken: cancellationToken);
+            var nowTime = await connection.ExecuteScalarAsync<DateTime>(new CommandDefinition("SELECT now(6)", cancellationToken: cancellationToken));
             result["serverTime"] = DateTime.SpecifyKind(nowTime, DateTimeKind.Unspecified).ToString("O");
         }
         catch (Exception ex)
@@ -93,9 +95,9 @@ public class MySqlDistributedLockFactory : IDistributedLockFactory
 
         var testKey = Guid.NewGuid().ToString();
         bool lockAcquired = false;
-        await using (var redlock = await CreateLockAsync(testKey, TimeSpan.Zero, cancellationToken))
+        await using (var myLock = await CreateLockAsync(testKey, TimeSpan.Zero, cancellationToken))
         {
-            lockAcquired = redlock.IsAcquired;
+            lockAcquired = myLock.IsAcquired;
         }
 
         result.Add("lock_acquired", lockAcquired);

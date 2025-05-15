@@ -1,3 +1,4 @@
+using jaytwo.DistributedLocks.InMemory;
 using jaytwo.DistributedLocks.MySql;
 using jaytwo.DistributedLocks.Postgres;
 using jaytwo.DistributedLocks.RedLock;
@@ -27,6 +28,8 @@ public class DistributedLockFactoryProvider
     {
         switch (moniker)
         {
+            case Monikers.InMemory:
+                return new InProcessLockFactory(nameof(DistributedLockFactoryProvider));
             case Monikers.Postgres:
                 return _postgresLockFactory.Invoke();
             case Monikers.MySql:

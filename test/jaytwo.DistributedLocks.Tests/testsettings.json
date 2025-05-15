@@ -1,7 +1,7 @@
 {
   "ConnectionStrings": {
-    "PostgresDb": "server=localhost;port=55432;database=pgdb;uid=pguser;pwd=pgpass",
-    "MySqlDb": "server=localhost;port=53306;database=mydb;uid=myuser;pwd=mypass",
-    "Redis": "localhost:56379,serviceName=redservice,password=redpass"
+    "PostgresDb": "server=localhost;port=45432;database=pgdb;uid=pguser;pwd=pgpass",
+    "MySqlDb": "server=localhost;port=43306;database=mydb;uid=myuser;pwd=mypass",
+    "Redis": "localhost:46379,serviceName=redservice,password=redpass"
   }
 }

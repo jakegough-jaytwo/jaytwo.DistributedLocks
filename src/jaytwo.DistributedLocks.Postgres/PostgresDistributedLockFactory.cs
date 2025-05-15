@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Dapper;
 using Npgsql;
 
 namespace jaytwo.DistributedLocks.Postgres;
@@ -67,7 +68,7 @@ public class PostgresDistributedLockFactory : IDistributedLockFactory
 
         try
         {
-            var nowTime = await connection.ExecuteScalarAsync<DateTime>("SELECT now()", cancellationToken: cancellationToken);
+            var nowTime = await connection.ExecuteScalarAsync<DateTime>(new CommandDefinition("SELECT now()", cancellationToken: cancellationToken));
             result["serverTime"] = DateTime.SpecifyKind(nowTime, DateTimeKind.Unspecified).ToString("O");
         }
         catch (Exception ex)
@@ -108,7 +109,7 @@ public class PostgresDistributedLockFactory : IDistributedLockFactory
     private static async Task<bool> PgTryAdvisoryLock(uint hashedKey, NpgsqlConnection connection, NpgsqlTransaction transaction, CancellationToken cancellationToken)
     {
         string query = $"SELECT pg_try_advisory_xact_lock({hashedKey})";
-        return await connection.ExecuteScalarAsync<bool>(query, transaction: transaction, cancellationToken: cancellationToken);
+        return await connection.ExecuteScalarAsync<bool>(new CommandDefinition(query, transaction: transaction, cancellationToken: cancellationToken));
     }
 
     private static async Task<bool> PgAdvisoryLock(uint hashedKey, int timeoutSeconds, NpgsqlConnection connection, NpgsqlTransaction transaction, CancellationToken cancellationToken)
@@ -116,7 +117,7 @@ public class PostgresDistributedLockFactory : IDistributedLockFactory
         string query = $"SELECT pg_advisory_xact_lock({hashedKey})";
         try
         {
-            await connection.ExecuteNonQueryAsync(query, transaction: transaction, timeoutSeconds: timeoutSeconds, cancellationToken: cancellationToken);
+            await connection.ExecuteAsync(new CommandDefinition(query, transaction: transaction, commandTimeout: timeoutSeconds, cancellationToken: cancellationToken));
             return true;
         }
         catch (NpgsqlException ex) when (ex.InnerException is TimeoutException)
@@ -145,7 +146,7 @@ public class PostgresDistributedLockFactory : IDistributedLockFactory
 
         try
         {
-            await connection.InitOpenConnectionAsync(cancellationToken);
+            await connection.OpenAsync(cancellationToken); // Dapper automatically closes connections that it automatically opened
             transaction = await connection.BeginTransactionAsync(cancellationToken);
             acquired = await advisoryLockDelegate(connection, transaction, cancellationToken);
 
