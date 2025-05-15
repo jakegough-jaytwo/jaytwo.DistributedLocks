@@ -2,13 +2,9 @@ using DistributedLocksSampleApp;
 using jaytwo.DistributedLocks.MySql;
 using jaytwo.DistributedLocks.Postgres;
 using jaytwo.DistributedLocks.RedLock;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 using MySql.Data.MySqlClient;
 using Npgsql;
-using RedLockNet.SERedis.Events;
-using StackExchange.Redis;
+using RedLockNet;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -41,7 +37,7 @@ RedisSetup.ConfigureRedis(builder.Services, "sampleapp");
 builder.Services.AddScoped(x =>
 {
     var config = x.GetRequiredService<IConfiguration>();
-    var redLockFactory = x.GetRequiredService<global::RedLockNet.IDistributedLockFactory>();
+    var redLockFactory = x.GetRequiredService<IDistributedLockFactory>();
     return new RedLockDistributedLockProvider("fizz", redLockFactory);
 });
 

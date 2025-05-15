@@ -2,6 +2,7 @@ using jaytwo.DistributedLocks.InMemory;
 using jaytwo.DistributedLocks.MySql;
 using jaytwo.DistributedLocks.Postgres;
 using jaytwo.DistributedLocks.RedLock;
+using RedLockNet;
 using RedLockNet.SERedis;
 using RedLockNet.SERedis.Configuration;
 using StackExchange.Redis;
@@ -41,7 +42,7 @@ public class DistributedLockProviderFactory
         }
     }
 
-    private static RedLockNet.IDistributedLockFactory CreateRedLockDistributedLockFactory(string connectionString)
+    private static IDistributedLockFactory CreateRedLockDistributedLockFactory(string connectionString)
     {
         var redisOptions = ConfigurationOptions.Parse(connectionString);
         var connectionMultiplexer = ConnectionMultiplexer.Connect(redisOptions);
