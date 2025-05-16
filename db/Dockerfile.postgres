@@ -1,0 +1,5 @@
+FROM postgres:9
+
+ENV POSTGRES_USER=pguser
+ENV POSTGRES_PASSWORD=pgpass
+ENV POSTGRES_DB=pgdb

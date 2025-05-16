@@ -96,6 +96,15 @@ nuget-push:
 		fi; \
 	done
 
+localdev:
+	docker compose --profile "localdev" up -d --wait --remove-orphans --build
+
+localdev-logs:
+	docker compose --profile "localdev" logs -f --tail=100
+
+localdev-clean:
+	docker compose --profile "localdev" down -v --remove-orphans
+
 testernet-up:
 	docker compose --project-name "${DOCKER_COMPOSE_PROJECT}" --profile "testernet" up -d --wait --remove-orphans
 
@@ -103,7 +112,9 @@ testernet-run:
 	docker run -it --rm --network "${DOCKER_COMPOSE_NETWORK}" -e TEST_ENV=testernet ${DOCKER_BUILDER_TAG}
 
 testernet-clean:
-	docker compose --project-name "${DOCKER_COMPOSE_PROJECT}" --profile "*" down -v --remove-orphans
+	docker compose --project-name "${DOCKER_COMPOSE_PROJECT}" --profile "testernet" down -v --remove-orphans
+
+testernet-down: testernet-clean
 
 docker-builder:
 	# building the base image to force caching those layers in an otherwise discarded stage of the multistage dockerfile
@@ -132,6 +143,7 @@ docker-pack: DOCKER_RUN_MAKE_TARGETS=pack-beta
 docker-pack: docker-run
 
 docker-clean:
+	docker compose --profile "*" down -v --remove-orphans
 	docker rm ${DOCKER_BUILDER_CONTAINER} && echo "Container removed: ${DOCKER_BUILDER_CONTAINER}" || echo  "Nothing to clean up for: ${DOCKER_BUILDER_CONTAINER}"
 	# not removing image DOCKER_BASE_TAG since we want the layer cache to stick around (hopefully they will be cleaned up on the scheduled job)
 	docker rmi ${DOCKER_BUILDER_TAG} && echo "Image removed: ${DOCKER_BUILDER_TAG}" || echo "Nothing to clean up for: ${DOCKER_BUILDER_TAG}"

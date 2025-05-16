@@ -21,6 +21,8 @@ public class TestFixture
 
         MySqlConnectionString = Configuration.GetConnectionString("MySqlDb")!;
 
+        SqlServerConnectionString = Configuration.GetConnectionString("SqlServerDb")!;
+
         RedisConnectionString = Configuration.GetConnectionString("Redis")!;
     }
 
@@ -31,6 +33,8 @@ public class TestFixture
     public string PostgresConnectionString { get; }
 
     public string MySqlConnectionString { get; }
+
+    public string SqlServerConnectionString { get; }
 
     public string RedisConnectionString { get; }
 }

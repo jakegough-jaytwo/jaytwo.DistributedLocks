@@ -83,7 +83,7 @@ public class MySqlDistributedLockProvider : IDistributedLockProvider
 
         try
         {
-            var nowTime = await connection.ExecuteScalarAsync<DateTime>(new CommandDefinition("SELECT now(6)", cancellationToken: cancellationToken));
+            var nowTime = await connection.ExecuteScalarAsync<DateTime>(new CommandDefinition("SELECT CURRENT_TIMESTAMP", cancellationToken: cancellationToken));
             result["serverTime"] = DateTime.SpecifyKind(nowTime, DateTimeKind.Unspecified).ToString("O");
         }
         catch (Exception ex)

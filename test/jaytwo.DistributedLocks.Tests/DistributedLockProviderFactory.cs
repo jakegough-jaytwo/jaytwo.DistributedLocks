@@ -2,6 +2,7 @@ using jaytwo.DistributedLocks.InMemory;
 using jaytwo.DistributedLocks.MySql;
 using jaytwo.DistributedLocks.Postgres;
 using jaytwo.DistributedLocks.RedLock;
+using jaytwo.DistributedLocks.SqlServer;
 using RedLockNet;
 using RedLockNet.SERedis;
 using RedLockNet.SERedis.Configuration;
@@ -13,15 +14,18 @@ public class DistributedLockProviderFactory
 {
     private readonly Func<IDistributedLockProvider> _mySqlLockProvider;
     private readonly Func<IDistributedLockProvider> _postgresLockProvider;
+    private readonly Func<IDistributedLockProvider> _sqlServerLockProvider;
     private readonly Func<IDistributedLockProvider> _redisLockProvider;
 
     public DistributedLockProviderFactory(
         string mySqlConnectionString,
         string postgresConnectionString,
+        string sqlServerConnectionString,
         string redisConnectionString)
     {
         _mySqlLockProvider = () => new MySqlDistributedLockProvider(mySqlConnectionString);
         _postgresLockProvider = () => new PostgresDistributedLockProvider(postgresConnectionString);
+        _sqlServerLockProvider = () => new SqlServerDistributedLockProvider(sqlServerConnectionString);
         _redisLockProvider = () => new RedLockDistributedLockProvider(CreateRedLockDistributedLockFactory(redisConnectionString));
     }
 
@@ -35,6 +39,8 @@ public class DistributedLockProviderFactory
                 return _postgresLockProvider.Invoke();
             case Monikers.MySql:
                 return _mySqlLockProvider.Invoke();
+            case Monikers.SqlServer:
+                return _sqlServerLockProvider.Invoke();
             case Monikers.RedLock:
                 return _redisLockProvider.Invoke();
             default:

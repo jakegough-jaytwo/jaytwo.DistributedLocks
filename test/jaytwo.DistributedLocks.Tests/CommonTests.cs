@@ -15,6 +15,7 @@ public class CommonTests : IClassFixture<TestFixture>
         _lockProviders = new DistributedLockProviderFactory(
             fixture.MySqlConnectionString,
             fixture.PostgresConnectionString,
+            fixture.SqlServerConnectionString,
             fixture.RedisConnectionString);
     }
 
@@ -25,6 +26,8 @@ public class CommonTests : IClassFixture<TestFixture>
     [InlineData(Monikers.MySql, 1)]
     [InlineData(Monikers.Postgres, 0)]
     [InlineData(Monikers.Postgres, 1)]
+    [InlineData(Monikers.SqlServer, 0)]
+    [InlineData(Monikers.SqlServer, 1)]
     [InlineData(Monikers.RedLock, 0)]
     [InlineData(Monikers.RedLock, 1)]
     public async Task CanAcquireLockAsync(string moniker, int waitSeconds)
@@ -48,6 +51,8 @@ public class CommonTests : IClassFixture<TestFixture>
     [InlineData(Monikers.MySql, 1)]
     [InlineData(Monikers.Postgres, 0)]
     [InlineData(Monikers.Postgres, 1)]
+    [InlineData(Monikers.SqlServer, 0)]
+    [InlineData(Monikers.SqlServer, 1)]
     [InlineData(Monikers.RedLock, 0)]
     [InlineData(Monikers.RedLock, 1)]
     public async Task DisposingLockReleasesKey(string moniker, int waitSeconds)
@@ -81,6 +86,8 @@ public class CommonTests : IClassFixture<TestFixture>
     [InlineData(Monikers.MySql, 1)]
     [InlineData(Monikers.Postgres, 0)]
     [InlineData(Monikers.Postgres, 1)]
+    [InlineData(Monikers.SqlServer, 0)]
+    [InlineData(Monikers.SqlServer, 1)]
     [InlineData(Monikers.RedLock, 0)]
     [InlineData(Monikers.RedLock, 1)]
     public async Task AcquiredLockBlocksAnotherLockAsync(string moniker, int waitSeconds)

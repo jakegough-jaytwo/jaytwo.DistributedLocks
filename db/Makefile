@@ -1,7 +1,5 @@
-up: database
-
-database:
-	docker-compose up --build --wait -d
+default:
+	cd .. && make localdev-clean localdev localdev-logs
 
 clean:
-	-docker-compose down -v --remove-orphans
+	cd .. && make localdev-clean

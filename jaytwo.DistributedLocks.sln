@@ -21,6 +21,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "jaytwo.DistributedLocks.Red
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "jaytwo.DistributedLocks.MySql", "src\jaytwo.DistributedLocks.MySql\jaytwo.DistributedLocks.MySql.csproj", "{73DD7194-C76A-4300-BDA9-B1D47C015D6D}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "jaytwo.DistributedLocks.SqlServer", "src\jaytwo.DistributedLocks.SqlServer\jaytwo.DistributedLocks.SqlServer.csproj", "{965EF32A-A295-261D-B075-6CB49499761C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -51,6 +53,10 @@ Global
 		{73DD7194-C76A-4300-BDA9-B1D47C015D6D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{73DD7194-C76A-4300-BDA9-B1D47C015D6D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{73DD7194-C76A-4300-BDA9-B1D47C015D6D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{965EF32A-A295-261D-B075-6CB49499761C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{965EF32A-A295-261D-B075-6CB49499761C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{965EF32A-A295-261D-B075-6CB49499761C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{965EF32A-A295-261D-B075-6CB49499761C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -62,6 +68,7 @@ Global
 		{13CFC2BB-D2A0-0C40-CF60-99C8B67C6921} = {7FB8087C-3131-406B-80B3-442B555FE577}
 		{5239584D-C993-318A-601E-66961B69F368} = {7FB8087C-3131-406B-80B3-442B555FE577}
 		{73DD7194-C76A-4300-BDA9-B1D47C015D6D} = {7FB8087C-3131-406B-80B3-442B555FE577}
+		{965EF32A-A295-261D-B075-6CB49499761C} = {7FB8087C-3131-406B-80B3-442B555FE577}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {1C50F668-CF37-4681-B29D-BC7694436EEE}
