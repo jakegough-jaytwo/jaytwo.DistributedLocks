@@ -2,7 +2,7 @@
   "ConnectionStrings": {
     "PostgresDb": "server=postgres;port=5432;database=pgdb;uid=pguser;pwd=pgpass",
     "MySqlDb": "server=mysql;port=3306;database=mydb;uid=myuser;pwd=mypass",
-    "SqlServerDb": "Data Source=localhost,1433;TrustServerCertificate=true;Initial Catalog=tester-db;User ID=sqluser;Password=sqlpass",
+    "SqlServerDb": "Data Source=localhost,1433;TrustServerCertificate=true;User ID=sa;Password=password123sdJwnwlk",
     "Redis": "redis:6379,serviceName=redservice,password=redpass"
   }
 }

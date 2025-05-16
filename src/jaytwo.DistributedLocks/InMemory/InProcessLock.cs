@@ -2,20 +2,20 @@ namespace jaytwo.DistributedLocks.InMemory;
 
 public class InProcessLock : IDistributedLock
 {
-    private Semaphore _semaphore;
+    private IDisposable? _releaser;
 
-    public InProcessLock(bool acquired, Semaphore semaphore)
+    public InProcessLock(bool acquired, IDisposable releaser)
     {
         IsAcquired = acquired;
-        _semaphore = semaphore;
+        _releaser = releaser;
     }
 
     public bool IsAcquired { get; }
 
     public void Dispose()
     {
-        _semaphore.Release();
-        _semaphore.Dispose();
+        _releaser?.Dispose();
+        _releaser = null;
     }
 
     public ValueTask DisposeAsync()

@@ -20,7 +20,7 @@ public class RedLockDistributedLockProvider : IDistributedLockProvider
 
     public TimeSpan DefaultWaitTime { get; set; }
 
-    private string InstanceKey { get; }
+    public string InstanceKey { get; }
 
     public async Task<IDistributedLock> CreateLockAsync(string key, TimeSpan? waitTime = default, CancellationToken cancellationToken = default)
     {
