@@ -1,4 +1,4 @@
-namespace jaytwo.DistributedLocks.InMemory;
+namespace jaytwo.DistributedLocks.InProcess;
 
 public class InProcessLock : IDistributedLock
 {

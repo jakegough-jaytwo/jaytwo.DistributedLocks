@@ -20,8 +20,8 @@ public class CommonTests : IClassFixture<TestFixture>
     }
 
     [Theory]
-    [InlineData(Monikers.InMemory, 0)]
-    [InlineData(Monikers.InMemory, 1)]
+    [InlineData(Monikers.InProcess, 0)]
+    [InlineData(Monikers.InProcess, 1)]
     [InlineData(Monikers.MySql, 0)]
     [InlineData(Monikers.MySql, 1)]
     [InlineData(Monikers.Postgres, 0)]
@@ -45,8 +45,8 @@ public class CommonTests : IClassFixture<TestFixture>
     }
 
     [Theory]
-    [InlineData(Monikers.InMemory, 0)]
-    [InlineData(Monikers.InMemory, 1)]
+    [InlineData(Monikers.InProcess, 0)]
+    [InlineData(Monikers.InProcess, 1)]
     [InlineData(Monikers.MySql, 0)]
     [InlineData(Monikers.MySql, 1)]
     [InlineData(Monikers.Postgres, 0)]
@@ -80,8 +80,8 @@ public class CommonTests : IClassFixture<TestFixture>
     }
 
     [Theory]
-    [InlineData(Monikers.InMemory, 0)]
-    [InlineData(Monikers.InMemory, 1)]
+    [InlineData(Monikers.InProcess, 0)]
+    [InlineData(Monikers.InProcess, 1)]
     [InlineData(Monikers.MySql, 0)]
     [InlineData(Monikers.MySql, 1)]
     [InlineData(Monikers.Postgres, 0)]
