@@ -39,7 +39,7 @@ public class SqlServerDistributedLockProvider : IDistributedLockProvider
     public async Task<IDistributedLock> CreateLockAsync(string key, TimeSpan? waitTime = default, CancellationToken cancellationToken = default)
     {
         var hashedKey = HashString($"{key}.{InstanceKey}"); // is hashing really necessary? in postgres we hash to produce an int, in mysql we hash to avoid sql injection
-        var timeoutMs = (int)(waitTime?.TotalMilliseconds ?? DefaultWaitTime.TotalMilliseconds);
+        var timeoutMs = (int)Math.Ceiling(waitTime?.TotalMilliseconds ?? DefaultWaitTime.TotalMilliseconds);
 
         bool acquired = false;
         var connection = _connectionFactory.Invoke();

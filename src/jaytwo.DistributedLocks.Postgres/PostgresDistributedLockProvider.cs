@@ -41,7 +41,7 @@ public class PostgresDistributedLockProvider : IDistributedLockProvider
     public async Task<IDistributedLock> CreateLockAsync(string key, TimeSpan? waitTime = default, CancellationToken cancellationToken = default)
     {
         var hashedKey = HashStringToUInt($"{key}.{InstanceKey}");
-        var timeoutSeconds = (int)(waitTime?.TotalSeconds ?? DefaultWaitTime.TotalSeconds);
+        var timeoutSeconds = (int)Math.Ceiling(waitTime?.TotalSeconds ?? DefaultWaitTime.TotalSeconds);
 
         if (timeoutSeconds == 0)
         {
