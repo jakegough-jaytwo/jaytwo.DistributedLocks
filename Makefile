@@ -90,7 +90,7 @@ nuget-push:
 	for nupkg in $$PACKED_NUPKG_FILES; do \
 		if [ -n "$$nupkg" ]; then \
 			dotnet nuget push \
-				"$$PACKED_NUPKG_FILE" \
+				"$$nupkg" \
 				--source "${NUGET_SOURCE_URL}" \
 				--api-key "$$NUGET_API_KEY"; \
 		fi; \
