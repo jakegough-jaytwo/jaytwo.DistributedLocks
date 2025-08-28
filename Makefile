@@ -1,6 +1,7 @@
 BUILD_SLN=./jaytwo.DistributedLocks.sln
 BUILD_DIRS=./src/jaytwo.DistributedLocks:./src/jaytwo.DistributedLocks.MySql:./src/jaytwo.DistributedLocks.Postgres:./src/jaytwo.DistributedLocks.RedLock
 BUILD_TEST_DIRS=./test/jaytwo.DistributedLocks.Tests
+ENABLE_COMPOSE_NETWORK=true
 
 NUGET_SOURCE_URL?=https://api.nuget.org/v3/index.json
 NUGET_API_KEY?=__missing_api_key__
@@ -13,10 +14,10 @@ BUILD_PACKED_DIR=${TOPDIR}/out/packed
 DOCKER_TAG?=$(call getDockerTag,$(BUILD_SLN))
 DOCKER_BASE_TAG?=${DOCKER_TAG}__base
 DOCKER_BUILDER_TAG?=${DOCKER_TAG}__builder
-DOCKER_COMPOSE_PROJECT=${DOCKER_TAG}__testernet
-DOCKER_COMPOSE_NETWORK=${DOCKER_COMPOSE_PROJECT}_default
 DOCKER_BUILDER_CONTAINER?=${DOCKER_BUILDER_TAG}
 DOCKER_RUN_MAKE_TARGETS?=run
+TESTERNET_COMPOSE_PROJECT=${DOCKER_TAG}__testernet
+TESTERNET_COMPOSE_NETWORK=${TESTERNET_COMPOSE_PROJECT}_default
 TIMESTAMP?=$(call getTimestamp)
 
 default: clean deps build test pack-beta nuget-check
@@ -97,22 +98,46 @@ nuget-push:
 	done
 
 localdev:
-	docker compose --profile "localdev" up -d --wait --remove-orphans --build
+	@if [ "$(ENABLE_COMPOSE_NETWORK)" = "true" ]; then \
+		docker compose --profile "localdev" up -d --wait --remove-orphans --build; \
+	else \
+		@echo "localdev is disabled. Set ENABLE_COMPOSE_NETWORK=true to enable."; \
+	fi
 
 localdev-logs:
-	docker compose --profile "localdev" logs -f --tail=100
+	@if [ "$(ENABLE_COMPOSE_NETWORK)" = "true" ]; then \
+		docker compose --profile "localdev" logs -f --tail=100; \
+	else \
+		@echo "localdev is disabled. Set ENABLE_COMPOSE_NETWORK=true to enable."; \
+	fi
 
 localdev-clean:
-	docker compose --profile "localdev" down -v --remove-orphans
+	@if [ "$(ENABLE_COMPOSE_NETWORK)" = "true" ]; then \
+		docker compose --profile "localdev" down -v --remove-orphans; \
+	else \
+		@echo "localdev is disabled. Set ENABLE_COMPOSE_NETWORK=true to enable."; \
+	fi
 
 testernet-up:
-	docker compose --project-name "${DOCKER_COMPOSE_PROJECT}" --profile "testernet" up -d --wait --remove-orphans
+	@if [ "$(ENABLE_COMPOSE_NETWORK)" = "true" ]; then \
+		docker compose --project-name "${TESTERNET_COMPOSE_PROJECT}" --profile "testernet" up -d --wait --remove-orphans; \
+	else \
+		@echo "localdev is disabled. Set ENABLE_COMPOSE_NETWORK=true to enable."; \
+	fi
 
 testernet-run:
-	docker run -it --rm --network "${DOCKER_COMPOSE_NETWORK}" -e TEST_ENV=testernet ${DOCKER_BUILDER_TAG}
+	@if [ "$(ENABLE_COMPOSE_NETWORK)" = "true" ]; then \
+		docker run -it --rm --network "${TESTERNET_COMPOSE_NETWORK}" -e TEST_ENV=testernet ${DOCKER_BUILDER_TAG}; \
+	else \
+		@echo "localdev is disabled. Set ENABLE_COMPOSE_NETWORK=true to enable."; \
+	fi
 
 testernet-clean:
-	docker compose --project-name "${DOCKER_COMPOSE_PROJECT}" --profile "testernet" down -v --remove-orphans
+	@if [ "$(ENABLE_COMPOSE_NETWORK)" = "true" ]; then \
+		docker compose --project-name "${TESTERNET_COMPOSE_PROJECT}" --profile "testernet" down -v --remove-orphans; \
+	else \
+		@echo "localdev is disabled. Set ENABLE_COMPOSE_NETWORK=true to enable."; \
+	fi
 
 testernet-down: testernet-clean
 
@@ -139,8 +164,8 @@ docker-test: docker-run
 docker-pack: DOCKER_RUN_MAKE_TARGETS=pack
 docker-pack: docker-run
 
-docker-pack: DOCKER_RUN_MAKE_TARGETS=pack-beta
-docker-pack: docker-run
+docker-pack-beta: DOCKER_RUN_MAKE_TARGETS=pack-beta
+docker-pack-beta: docker-run
 
 docker-clean:
 	docker compose --profile "*" down -v --remove-orphans
