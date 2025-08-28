@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 using Microsoft.Data.SqlClient;
 
 namespace jaytwo.DistributedLocks.SqlServer;

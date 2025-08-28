@@ -1,3 +1,6 @@
+using System;
+using System.Threading.Tasks;
+
 namespace jaytwo.DistributedLocks.InProcess;
 
 public class InProcessLock : IDistributedLock

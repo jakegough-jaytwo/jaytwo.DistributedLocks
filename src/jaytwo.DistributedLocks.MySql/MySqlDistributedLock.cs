@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 using MySql.Data.MySqlClient;
 
 namespace jaytwo.DistributedLocks.MySql;
