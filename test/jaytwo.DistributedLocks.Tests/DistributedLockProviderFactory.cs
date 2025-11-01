@@ -5,6 +5,7 @@ using jaytwo.DistributedLocks.MySql;
 using jaytwo.DistributedLocks.Postgres;
 using jaytwo.DistributedLocks.RedLock;
 using jaytwo.DistributedLocks.SqlServer;
+using Microsoft.Extensions.Logging;
 using RedLockNet;
 using RedLockNet.SERedis;
 using RedLockNet.SERedis.Configuration;
@@ -18,17 +19,21 @@ public class DistributedLockProviderFactory
     private readonly Func<IDistributedLockProvider> _postgresLockProvider;
     private readonly Func<IDistributedLockProvider> _sqlServerLockProvider;
     private readonly Func<IDistributedLockProvider> _redisLockProvider;
+    private readonly Func<IDistributedLockProvider> _inProcessLockProvider;
 
     public DistributedLockProviderFactory(
+        ILogger logger,
         string mySqlConnectionString,
         string postgresConnectionString,
         string sqlServerConnectionString,
         string redisConnectionString)
     {
-        _mySqlLockProvider = () => new MySqlDistributedLockProvider(mySqlConnectionString);
-        _postgresLockProvider = () => new PostgresDistributedLockProvider(postgresConnectionString);
-        _sqlServerLockProvider = () => new SqlServerDistributedLockProvider(sqlServerConnectionString);
-        _redisLockProvider = () => new RedLockDistributedLockProvider(CreateRedLockDistributedLockFactory(redisConnectionString));
+        _mySqlLockProvider = () => MySqlDistributedLockProvider.CreateWithDefaultLockNamespace(mySqlConnectionString, logger);
+        _postgresLockProvider = () => PostgresDistributedLockProvider.CreateWithDefaultLockNamespace(postgresConnectionString, logger);
+        _sqlServerLockProvider = () => SqlServerDistributedLockProvider.CreateWithDefaultLockNamespace(sqlServerConnectionString, logger);
+        //_sqlServerLockProvider = () => SqlServerDistributedLockProvider.CreateWithDefaultLockNamespace(sqlServerConnectionString, logger);
+        _redisLockProvider = () => RedLockDistributedLockProvider.CreateWithDefaultLockNamespace(CreateRedLockDistributedLockFactory(redisConnectionString), logger);
+        _inProcessLockProvider = () => new InProcessLockProvider("default", logger);
     }
 
     public IDistributedLockProvider GetProvider(string moniker)
@@ -36,7 +41,7 @@ public class DistributedLockProviderFactory
         switch (moniker)
         {
             case Monikers.InProcess:
-                return new InProcessLockProvider(nameof(DistributedLockProviderFactory));
+                return _inProcessLockProvider.Invoke();
             case Monikers.Postgres:
                 return _postgresLockProvider.Invoke();
             case Monikers.MySql:

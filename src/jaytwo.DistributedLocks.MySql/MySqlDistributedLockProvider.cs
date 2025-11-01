@@ -1,148 +1,185 @@
 using System;
-using System.Collections.Generic;
-using System.Security.Cryptography;
-using System.Text;
+using System.Data;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using jaytwo.DistributedLocks.Logging;
+using Microsoft.Extensions.Logging;
 using MySql.Data.MySqlClient;
 
 namespace jaytwo.DistributedLocks.MySql;
 
-public class MySqlDistributedLockProvider : IDistributedLockProvider
+public sealed class MySqlDistributedLockProvider : DbDistributedLockProvider<MySqlConnection>, IDistributedLockProvider
 {
-    private Func<MySqlConnection> _connectionFactory;
+    internal const string MySqlProviderName = "MySql";
+    internal const int DefaultLockWaitSecondsFallback = 30;
 
-    public MySqlDistributedLockProvider(string connectionString, TimeSpan? defaultWaitTime = default)
-        : this(Guid.NewGuid().ToString(), connectionString, defaultWaitTime)
+    public MySqlDistributedLockProvider(string connectionString, string lockNamespace, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
+        : this(() => new MySqlConnection(connectionString), lockNamespace, logger, defaultLockWaitSeconds)
     {
     }
 
-    public MySqlDistributedLockProvider(string instanceKey, string connectionString, TimeSpan? defaultWaitTime = default)
-        : this(instanceKey, () => CreateConnection(connectionString), defaultWaitTime)
+    public MySqlDistributedLockProvider(Func<MySqlConnection> connectionFactory, string lockNamespace, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
+        : base(MySqlProviderName, connectionFactory, lockNamespace, defaultLockWaitSeconds, logger)
     {
+        if (string.IsNullOrEmpty(lockNamespace))
+        {
+            throw new ArgumentException(
+                "No lock namespace provided. Provide a LockNamespace or use CreateWithDefaultLockNamespace().",
+                nameof(lockNamespace));
+        }
     }
 
-    public MySqlDistributedLockProvider(Func<MySqlConnection> connectionFactory, TimeSpan? defaultWaitTime = default)
-        : this(Guid.NewGuid().ToString(), connectionFactory, defaultWaitTime)
+    public static MySqlDistributedLockProvider CreateWithDefaultLockNamespace(string connectionString, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
+        => new(connectionString, DefaultLockNamespace(logger), logger, defaultLockWaitSeconds);
+
+    public static MySqlDistributedLockProvider CreateWithDefaultLockNamespace(Func<MySqlConnection> connectionFactory, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
+        => new(connectionFactory, DefaultLockNamespace(logger), logger, defaultLockWaitSeconds);
+
+    public override async Task<IDistributedLock> CreateLockAsync(string resource, int? waitSeconds = default, CancellationToken cancellationToken = default)
     {
+        if (string.IsNullOrWhiteSpace(resource))
+        {
+            throw new ArgumentException("Resource is required.", nameof(resource));
+        }
+
+        if (waitSeconds < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(waitSeconds));
+        }
+
+        var lockAttemptId = Guid.NewGuid();
+        var qualifiedResourcePlain = string.IsNullOrEmpty(LockNamespace) ? resource : $"{LockNamespace}:{resource}";
+        var qualifiedResourceHash = HashStringToHex(qualifiedResourcePlain); // hashing to avoid 64 char limit in mysql
+        var effectiveWaitSeconds = waitSeconds ?? DefaultLockWaitSeconds;
+        var effectiveWaitTime = TimeSpan.FromSeconds(effectiveWaitSeconds);
+
+        var eventLogger = GetEventLogger(resource, qualifiedResourceHash, lockAttemptId);
+        using var loggerScope = eventLogger?.DefaultScope();
+
+        eventLogger?.LogRequested(
+            resource,
+            requestWaitTime: waitSeconds.HasValue ? TimeSpan.FromSeconds(waitSeconds.Value) : null,
+            effectiveWaitTime: effectiveWaitTime,
+            extraConfig: x => x.WithFields(
+                ("qualified_resource_plain", qualifiedResourcePlain),
+                ("qualified_resource_hash", qualifiedResourceHash)));
+
+        return await CreateLockAsync(qualifiedResourceHash, effectiveWaitSeconds, eventLogger, cancellationToken);
     }
 
-    public MySqlDistributedLockProvider(string instanceKey, Func<MySqlConnection> connectionFactory, TimeSpan? defaultWaitTime = default)
+    internal async Task<IDistributedLock> CreateLockAsync(string name, int effectiveWaitSeconds, EventLogger? eventLogger, CancellationToken cancellationToken)
     {
-        _connectionFactory = connectionFactory;
-        DefaultWaitTime = defaultWaitTime ?? TimeSpan.FromSeconds(30);
-        InstanceKey = instanceKey;
-    }
-
-    public TimeSpan DefaultWaitTime { get; set; }
-
-    public string InstanceKey { get; }
-
-    public async Task<IDistributedLock> CreateLockAsync(string key, TimeSpan? waitTime = default, CancellationToken cancellationToken = default)
-    {
-        var hashedKey = HashStringToUInt($"{key}.{InstanceKey}");
-        var effectiveTimeout = waitTime ?? DefaultWaitTime;
-
-        string query = $"SELECT GET_LOCK('{hashedKey}', {effectiveTimeout.TotalSeconds})";
-
-        var connection = _connectionFactory.Invoke();
         bool acquired = false;
+        var connection = ConnectionFactory.Invoke();
         try
         {
-            EnsureConnectionPoolingDisabled(connection);
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false); // Dapper automatically closes connections that it automatically opened
 
-            await connection.OpenAsync(cancellationToken); // Dapper automatically closes connections that it automatically opened
-            acquired = await connection.ExecuteScalarAsync<bool>(new CommandDefinition(query, cancellationToken: cancellationToken));
+            acquired = await GetLockAsync(connection, name, effectiveWaitSeconds, eventLogger, cancellationToken).ConfigureAwait(false);
 
             if (acquired)
             {
-                return new MySqlDistributedLock(connection);
+                return new MySqlDistributedLock(this, connection, name, eventLogger);
             }
         }
         finally
         {
             if (!acquired)
             {
-                await connection.DisposeAsync();
+                await connection.DisposeAsync().ConfigureAwait(false);
             }
         }
 
         return NullLock.Instance;
     }
 
-    public async Task<IReadOnlyDictionary<string, object>> HealthCheckAsync(CancellationToken cancellationToken = default)
+    protected override object HealthCheckConnectionStringDetails(string connectionString)
     {
-        await using var connection = _connectionFactory.Invoke();
-        var connectionStringBuilder = new MySqlConnectionStringBuilder(connection.ConnectionString);
+        var connectionStringBuilder = new MySqlConnectionStringBuilder(connectionString);
 
-        var result = new Dictionary<string, object>()
+        return new
         {
-            { "server", connectionStringBuilder.Server! },
-            { "port", connectionStringBuilder.Port! },
-            { "database", connectionStringBuilder.Database! },
-            { "userid", connectionStringBuilder.UserID! },
-            { "pooling", connectionStringBuilder.Pooling },
+            connectionStringBuilder.Server,
+            connectionStringBuilder.Port,
+            connectionStringBuilder.Database,
+            connectionStringBuilder.UserID,
+            connectionStringBuilder.Pooling,
+        };
+    }
+
+    protected override async Task<object> HealthCheckServerDataAsync(MySqlConnection connection, CancellationToken cancellationToken)
+    {
+        var serverInfo = await QuerySingleAnonymousAsync(
+            connection,
+            "SELECT current_timestamp as time, @@hostname as hostname, @@port as port",
+            prototype: new { time = default(DateTime), hostname = default(string), port = default(ulong) },
+            cancellationToken);
+
+        return new
+        {
+            current_timestamp = DateTime.SpecifyKind(serverInfo.time, DateTimeKind.Unspecified).ToString("O"),
+            serverInfo.hostname,
+            serverInfo.port,
+        };
+    }
+
+    private async Task<bool> GetLockAsync(MySqlConnection connection, string name, int timeoutSeconds, EventLogger? eventLogger, CancellationToken cancellationToken)
+    {
+        using var loggerScope = eventLogger?.Scope(x => x.WithFields(("sql_command", "GET_LOCK")));
+        const string query = "SELECT GET_LOCK(@name, @timeout)";
+
+        var args = new
+        {
+            name = name,
+            timeout = timeoutSeconds,
         };
 
+        // Ensure SQL command timeout won't undercut the lock timeout
+        int commandTimeoutSeconds = timeoutSeconds + 2;
+
+        int? returnValue = null;
+        string? result = null;
+        var stopwatch = Stopwatch.StartNew();
         try
         {
-            var nowTime = await connection.ExecuteScalarAsync<DateTime>(new CommandDefinition("SELECT CURRENT_TIMESTAMP", cancellationToken: cancellationToken));
-            result["serverTime"] = DateTime.SpecifyKind(nowTime, DateTimeKind.Unspecified).ToString("O");
+            returnValue = await connection.ExecuteScalarAsync<int?>(new CommandDefinition(query, args, commandTimeout: commandTimeoutSeconds, cancellationToken: cancellationToken)).ConfigureAwait(false);
+            stopwatch.Stop();
+
+            result = returnValue switch
+            {
+                0 => "timeout/not acquired",
+                1 => "acquired",
+                _ => "error",
+            };
+        }
+        catch (OperationCanceledException ex)
+        {
+            stopwatch.Stop();
+            eventLogger?.LogCancelled(stopwatch.Elapsed, ex);
+            throw;
         }
         catch (Exception ex)
         {
-            var healthCheckException = new Exception(ex.Message, ex);
-            healthCheckException.Data.Add(nameof(result), result);
-            throw healthCheckException;
+            stopwatch.Stop();
+            eventLogger?.LogError(stopwatch.Elapsed, ex);
+            throw;
         }
 
-        var testKey = Guid.NewGuid().ToString();
-        bool lockAcquired = false;
-        await using (var myLock = await CreateLockAsync(testKey, TimeSpan.Zero, cancellationToken))
+        if (returnValue == 1)
         {
-            lockAcquired = myLock.IsAcquired;
+            eventLogger?.LogAcquired(stopwatch.Elapsed, x => x.AppendToMessage(("return_value", returnValue), ("result", result)));
+            return true;
         }
-
-        result.Add("lock_acquired", lockAcquired);
-        return result;
-    }
-
-    public void Dispose()
-    {
-    }
-
-    public ValueTask DisposeAsync()
-    {
-        return default;
-    }
-
-    private static uint HashStringToUInt(string input)
-    {
-        using var md5 = MD5.Create();
-        byte[] hashBytes = md5.ComputeHash(Encoding.UTF8.GetBytes(input));
-        return BitConverter.ToUInt32(hashBytes, 0);
-    }
-
-    private static MySqlConnection CreateConnection(string connectionString)
-    {
-        var connectionStringWithPoolingDisabled = GetConnectionStringWithPoolingDisabled(connectionString);
-        return new MySqlConnection(connectionStringWithPoolingDisabled);
-    }
-
-    private static string GetConnectionStringWithPoolingDisabled(string connectionString)
-    {
-        var builder = new MySqlConnectionStringBuilder(connectionString);
-        builder.Pooling = false;
-        return builder.ToString();
-    }
-
-    private static void EnsureConnectionPoolingDisabled(MySqlConnection connection)
-    {
-        var builder = new MySqlConnectionStringBuilder(connection.ConnectionString);
-        if (builder.Pooling)
+        else
         {
-            throw new InvalidOperationException("Connection pooling is enabled. Please disable pooling for advisory locks to work correctly.");
+            // TODO: is it valid to say timeout with no wait?
+            eventLogger?.LogTimedOut(stopwatch.Elapsed, x => x.AppendToMessage(("return_value", returnValue), ("result", result)));
+            return false;
         }
     }
+
+    private async Task<T> QuerySingleAnonymousAsync<T>(IDbConnection connection, string sql, T prototype, CancellationToken cancellationToken)
+        => await connection.QuerySingleAsync<T>(new CommandDefinition(sql, cancellationToken: cancellationToken)).ConfigureAwait(false);
 }

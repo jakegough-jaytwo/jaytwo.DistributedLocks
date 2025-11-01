@@ -32,7 +32,7 @@ public class PostgresTests : IClassFixture<TestFixture>
     [Fact]
     public async Task CanConnect()
     {
-        using var connection = new NpgsqlConnection(_connectionString);
+        await using var connection = new NpgsqlConnection(_connectionString);
 
         await connection.OpenAsync();
 

@@ -31,7 +31,7 @@ public class MySqlTests : IClassFixture<TestFixture>
     [Fact]
     public async Task CanConnect()
     {
-        using var connection = new MySqlConnection(_connectionString);
+        await using var connection = new MySqlConnection(_connectionString);
 
         await connection.OpenAsync();
 

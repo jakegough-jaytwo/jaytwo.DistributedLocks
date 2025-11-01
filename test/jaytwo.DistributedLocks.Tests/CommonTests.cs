@@ -1,5 +1,7 @@
 using System;
+using System.Text.Json;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -7,6 +9,7 @@ namespace jaytwo.DistributedLocks.Tests;
 
 public class CommonTests : IClassFixture<TestFixture>
 {
+    private readonly ILogger _logger;
     private readonly ITestOutputHelper _output;
     private readonly DistributedLockProviderFactory _lockProviders;
 
@@ -14,11 +17,47 @@ public class CommonTests : IClassFixture<TestFixture>
     {
         _output = output;
 
+        var loggerFactory = LoggerFactory.Create(b =>
+        {
+            b.SetMinimumLevel(LogLevel.Trace);
+
+            b.AddXUnit(output, opt =>
+            {
+                opt.IncludeScopes = true;
+                //opt.Format = XUnitFormatterNames.Systemd; // matches SimpleConsole-style
+            });
+        });
+
+        _logger = loggerFactory.CreateLogger<CommonTests>();
+
         _lockProviders = new DistributedLockProviderFactory(
+            _logger,
             fixture.MySqlConnectionString,
             fixture.PostgresConnectionString,
             fixture.SqlServerConnectionString,
             fixture.RedisConnectionString);
+    }
+
+    [Theory]
+    [InlineData(Monikers.InProcess)]
+    [InlineData(Monikers.MySql)]
+    [InlineData(Monikers.Postgres)]
+    [InlineData(Monikers.SqlServer)]
+    [InlineData(Monikers.RedLock)]
+    public async Task HealthCheckAsync(string moniker)
+    {
+        // arrange
+        using var lockProvider = _lockProviders.GetProvider(moniker);
+
+        // act
+        var healthCheckResult = await lockProvider.HealthCheckAsync();
+
+        // assert
+        Assert.NotNull(healthCheckResult);
+
+        _output.WriteLine(string.Empty);
+        _output.WriteLine("Healthcheck:");
+        _output.WriteLine(JsonSerializer.Serialize(healthCheckResult, new JsonSerializerOptions { WriteIndented = true }));
     }
 
     [Theory]
@@ -39,7 +78,7 @@ public class CommonTests : IClassFixture<TestFixture>
         using var lockProvider = _lockProviders.GetProvider(moniker);
 
         // act
-        using (var firstLock = await lockProvider.CreateLockAsync(key, TimeSpan.FromSeconds(waitSeconds)))
+        using (var firstLock = await lockProvider.CreateLockAsync(key, waitSeconds))
         {
             // assert
             Assert.True(firstLock.IsAcquired);
@@ -66,12 +105,12 @@ public class CommonTests : IClassFixture<TestFixture>
         bool secondLockAcquired;
 
         // Act
-        using (var firstLock = await lockProvider.CreateLockAsync(key, TimeSpan.FromSeconds(waitSeconds)))
+        using (var firstLock = await lockProvider.CreateLockAsync(key, waitSeconds))
         {
             firstLockAcquired = firstLock.IsAcquired;
         }
 
-        using (var secondtLock = await lockProvider.CreateLockAsync(key, TimeSpan.FromSeconds(waitSeconds)))
+        using (var secondtLock = await lockProvider.CreateLockAsync(key, waitSeconds))
         {
             secondLockAcquired = secondtLock.IsAcquired;
         }
@@ -101,11 +140,11 @@ public class CommonTests : IClassFixture<TestFixture>
         bool secondLockAcquired;
 
         // Act
-        using (var firstLock = await lockProvider.CreateLockAsync(key, TimeSpan.FromSeconds(waitSeconds)))
+        using (var firstLock = await lockProvider.CreateLockAsync(key, waitSeconds))
         {
             firstLockAcquired = firstLock.IsAcquired;
 
-            using (var secondLockWait = await lockProvider.CreateLockAsync(key, TimeSpan.FromSeconds(waitSeconds)))
+            using (var secondLockWait = await lockProvider.CreateLockAsync(key, waitSeconds))
             {
                 secondLockAcquired = secondLockWait.IsAcquired;
             }

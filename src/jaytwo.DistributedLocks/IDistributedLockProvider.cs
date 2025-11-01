@@ -7,9 +7,9 @@ namespace jaytwo.DistributedLocks;
 
 public interface IDistributedLockProvider : IDisposable, IAsyncDisposable
 {
-    TimeSpan DefaultWaitTime { get; set; }
+    int DefaultLockWaitSeconds { get; }
 
-    Task<IDistributedLock> CreateLockAsync(string key, TimeSpan? waitTime = default, CancellationToken cancellationToken = default);
+    Task<IDistributedLock> CreateLockAsync(string resource, int? waitSeconds = default, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyDictionary<string, object>> HealthCheckAsync(CancellationToken cancellationToken = default);
 }

@@ -1,72 +1,139 @@
 using System;
-using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
+using jaytwo.DistributedLocks.Logging;
+using Microsoft.Extensions.Logging;
 using RedLockNet;
+using RedLockNet.SERedis;
 
 namespace jaytwo.DistributedLocks.RedLock;
 
-public class RedLockDistributedLockProvider : IDistributedLockProvider
+public sealed class RedLockDistributedLockProvider : DistributedLockProvider, IDistributedLockProvider
 {
-    private IDistributedLockFactory _redLockFactory;
+    internal const string RedisProviderName = "Redis";
+    internal const int DefaultLockWaitSecondsFallback = 30;
 
-    public RedLockDistributedLockProvider(IDistributedLockFactory redLockFactory, TimeSpan? defaultWaitTime = default)
-        : this(Guid.NewGuid().ToString(), redLockFactory, defaultWaitTime)
-    {
-    }
+    internal static readonly TimeSpan DefaultExpiry = TimeSpan.FromSeconds(60);
+    internal static readonly TimeSpan DefaultRetry = TimeSpan.FromMilliseconds(250); // faster retry usually better
 
-    public RedLockDistributedLockProvider(string instanceKey, IDistributedLockFactory redLockFactory, TimeSpan? defaultWaitTime = default)
+    private readonly IDistributedLockFactory _redLockFactory;
+
+    public RedLockDistributedLockProvider(IDistributedLockFactory redLockFactory, string lockNamespace, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
+        : base(RedisProviderName, lockNamespace, defaultLockWaitSeconds, logger)
     {
+        if (redLockFactory == null)
+        {
+            throw new ArgumentNullException(nameof(redLockFactory));
+        }
+
         _redLockFactory = redLockFactory;
-        DefaultWaitTime = defaultWaitTime ?? TimeSpan.FromSeconds(30);
-        InstanceKey = instanceKey;
     }
 
-    public TimeSpan DefaultWaitTime { get; set; }
+    public static RedLockDistributedLockProvider CreateWithDefaultLockNamespace(IDistributedLockFactory redLockFactory, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
+        => new(redLockFactory, DefaultLockNamespace(logger), logger, defaultLockWaitSeconds);
 
-    public string InstanceKey { get; }
-
-    public async Task<IDistributedLock> CreateLockAsync(string key, TimeSpan? waitTime = default, CancellationToken cancellationToken = default)
+    public override async Task<IDistributedLock> CreateLockAsync(string resource, int? waitSeconds = default, CancellationToken cancellationToken = default)
     {
-        var redLockKey = $"{key}.{InstanceKey}";
-        var redLock = await _redLockFactory.CreateLockAsync(
-            resource: redLockKey,
-            expiryTime: TimeSpan.FromSeconds(60),
-            waitTime: waitTime ?? DefaultWaitTime,
-            retryTime: TimeSpan.FromSeconds(3),
-            cancellationToken: cancellationToken);
+        TimeSpan? waitTime = waitSeconds.HasValue ? TimeSpan.FromSeconds(waitSeconds.Value) : null;
+        return await CreateLockAsync(resource, null, waitTime, null, cancellationToken).ConfigureAwait(false);
+    }
 
-        if (redLock.IsAcquired)
+    public async Task<IDistributedLock> CreateLockAsync(string resource, TimeSpan? expiryTime, TimeSpan? waitTime, TimeSpan? retryTime, CancellationToken cancellationToken = default)
+    {
+        if (waitTime < TimeSpan.Zero)
         {
-            return new RedLockDistributedLock(redLock);
+            throw new ArgumentOutOfRangeException(nameof(waitTime));
         }
 
-        await redLock.DisposeAsync();
+        var lockAttemptId = Guid.NewGuid();
+        var qualifiedResource = string.IsNullOrEmpty(LockNamespace) ? resource : $"{LockNamespace}:{resource}";
+        var effectiveWaitTime = waitTime ?? TimeSpan.FromSeconds(DefaultLockWaitSeconds);
+        var effectiveExpiryTime = expiryTime ?? DefaultExpiry;
+        var effectiveRetryTime = retryTime ?? DefaultRetry;
+
+        var eventLogger = GetEventLogger(resource, qualifiedResource, lockAttemptId);
+        using var loggerScope = eventLogger?.DefaultScope();
+
+        eventLogger?.LogRequested(
+            resource,
+            requestWaitTime: waitTime,
+            effectiveWaitTime: effectiveWaitTime,
+            extraConfig: x => x.WithFields(
+                ("expiry_time_seconds", eventLogger?.FormatTimeSeconds(effectiveExpiryTime)),
+                ("retry_time_seconds", eventLogger?.FormatTimeSeconds(effectiveRetryTime))));
+
+        return await CreateLockAsync(qualifiedResource, effectiveExpiryTime, effectiveWaitTime, effectiveRetryTime, eventLogger, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<IDistributedLock> CreateLockAsync(string qualifiedResource, TimeSpan expiryTime, TimeSpan waitTime, TimeSpan retryTime, EventLogger? eventLogger, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(qualifiedResource))
+        {
+            throw new ArgumentException("Qualified Resource is required.", nameof(qualifiedResource));
+        }
+
+        if (expiryTime < TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(expiryTime));
+        }
+
+        if (waitTime < TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(waitTime));
+        }
+
+        if (retryTime < TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(retryTime));
+        }
+
+        IRedLock? result = null;
+        var acquired = false;
+
+        var stopwatch = Stopwatch.StartNew();
+        try
+        {
+            result = await _redLockFactory.CreateLockAsync(
+                resource: qualifiedResource,
+                expiryTime: expiryTime,
+                waitTime: waitTime,
+                retryTime: retryTime,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+            stopwatch.Stop();
+            acquired = result != null && result.IsAcquired;
+        }
+        catch (OperationCanceledException ex)
+        {
+            stopwatch.Stop();
+            eventLogger?.LogCancelled(stopwatch.Elapsed, ex);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            stopwatch.Stop();
+            eventLogger?.LogError(stopwatch.Elapsed, ex);
+            throw;
+        }
+
+        if (acquired)
+        {
+            eventLogger?.LogAcquired(stopwatch.Elapsed, x => x.WithFields(("redlock_lock_id", result?.LockId)));
+        }
+        else
+        {
+            eventLogger?.LogTimedOut(stopwatch.Elapsed);
+        }
+
+        if (acquired)
+        {
+            return new RedLockDistributedLock(this, result!, qualifiedResource, eventLogger);
+        }
+        else if (result != null)
+        {
+            await result.DisposeAsync();
+        }
+
         return NullLock.Instance;
-    }
-
-    public async Task<IReadOnlyDictionary<string, object>> HealthCheckAsync(CancellationToken cancellationToken = default)
-    {
-        var result = new Dictionary<string, object>();
-
-        var testKey = Guid.NewGuid().ToString();
-        bool lockAcquired = false;
-        await using (var redlock = await CreateLockAsync(testKey, TimeSpan.Zero, cancellationToken))
-        {
-            lockAcquired = redlock.IsAcquired;
-        }
-
-        result.Add("lock_acquired", lockAcquired);
-
-        return result;
-    }
-
-    public void Dispose()
-    {
-    }
-
-    public ValueTask DisposeAsync()
-    {
-        return default;
     }
 }

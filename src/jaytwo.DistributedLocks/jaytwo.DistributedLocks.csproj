@@ -15,4 +15,9 @@
     <None Include="..\..\README.md" Pack="true" PackagePath="" Link="README.md" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.*" />
+    <PackageReference Include="jaytwo.TimeExpression" Version="0.1.0-beta-20251101163444" />
+  </ItemGroup>
+
 </Project>

@@ -1,24 +1,48 @@
 using System;
+using System.Diagnostics;
 using System.Threading.Tasks;
+using jaytwo.DistributedLocks.Logging;
 
 namespace jaytwo.DistributedLocks.InProcess;
 
-public class InProcessLock : IDistributedLock
+public sealed class InProcessLock : DistributedLock<InProcessLockProvider, string>, IDistributedLock, IDisposable, IAsyncDisposable
 {
-    private IDisposable? _releaser;
+    private readonly IDisposable? _releaser;
+    private readonly Stopwatch _lockHeldTimer;
 
-    public InProcessLock(bool acquired, IDisposable releaser)
+    private bool _isAcquired;
+    private volatile bool _disposed;
+
+    public InProcessLock(InProcessLockProvider provider, IDisposable releaser, string providerResource, EventLogger? eventLogger)
+        : base(provider, providerResource, eventLogger)
     {
-        IsAcquired = acquired;
         _releaser = releaser;
+
+        _lockHeldTimer = Stopwatch.StartNew();
+        _isAcquired = true;
     }
 
-    public bool IsAcquired { get; }
+    public override bool IsAcquired => _isAcquired;
 
     public void Dispose()
     {
-        _releaser?.Dispose();
-        _releaser = null;
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        _lockHeldTimer.Stop();
+
+        using (EventLogger?.DefaultScope())
+        {
+            var stopwatch = Stopwatch.StartNew();
+            _releaser?.Dispose();
+            stopwatch.Stop();
+
+            _isAcquired = false;
+            EventLogger?.LogReleased(stopwatch.Elapsed, _lockHeldTimer.Elapsed);
+        }
     }
 
     public ValueTask DisposeAsync()

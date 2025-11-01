@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\jaytwo.DistributedLocks\jaytwo.DistributedLocks.csproj" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.*" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">

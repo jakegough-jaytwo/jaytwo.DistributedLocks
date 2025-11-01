@@ -31,7 +31,7 @@ public class SqlServerTests : IClassFixture<TestFixture>
     [Fact]
     public async Task CanConnect()
     {
-        using var connection = new SqlConnection(_connectionString);
+        await using var connection = new SqlConnection(_connectionString);
 
         await connection.OpenAsync();
 

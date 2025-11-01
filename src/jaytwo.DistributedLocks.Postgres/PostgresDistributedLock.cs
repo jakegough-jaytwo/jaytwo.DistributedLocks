@@ -1,31 +1,107 @@
+using System;
+using System.Diagnostics;
+using System.Threading;
 using System.Threading.Tasks;
+using jaytwo.DistributedLocks.Logging;
 using Npgsql;
 
 namespace jaytwo.DistributedLocks.Postgres;
 
-public class PostgresDistributedLock : IDistributedLock
+public sealed class PostgresDistributedLock : DistributedLock<PostgresDistributedLockProvider, long>, IDistributedLock, IDisposable, IAsyncDisposable
 {
     private readonly NpgsqlConnection _connection;
     private readonly NpgsqlTransaction _transaction;
 
-    public PostgresDistributedLock(NpgsqlConnection connection, NpgsqlTransaction transaction)
+    private readonly Stopwatch _lockHeldTimer;
+
+    private bool _isAcquired;
+    private int _disposed;
+
+    public PostgresDistributedLock(
+        PostgresDistributedLockProvider provider,
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        long key,
+        EventLogger? eventLogger)
+        : base(provider, key, eventLogger)
     {
-        _connection = connection;
+        _connection = connection ?? throw new ArgumentNullException(nameof(connection));
         _transaction = transaction;
-        IsAcquired = true;
+
+        _lockHeldTimer = Stopwatch.StartNew();
+        _isAcquired = true;
     }
 
-    public bool IsAcquired { get; }
+    // TODO: connect this to connection/transaction state and _disposed
+    public override bool IsAcquired => _isAcquired;
 
     public void Dispose()
     {
-        _transaction.Dispose();
-        _connection.Dispose();
+        DoDispose(() =>
+        {
+            _transaction.Dispose();
+            _connection.Dispose();
+        });
+
+        GC.SuppressFinalize(this);
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
-        await _transaction.DisposeAsync();
-        await _connection.DisposeAsync();
+        var valueTask = DoDispose(async () =>
+        {
+            await _transaction.DisposeAsync();
+            await _connection.DisposeAsync();
+        });
+
+        GC.SuppressFinalize(this);
+        return valueTask;
+    }
+
+    private void DoDispose(Action disposeCallback)
+        => DoDispose(() =>
+        {
+            disposeCallback();
+            return default;
+        }).AsTask().GetAwaiter().GetResult();
+
+    private async ValueTask DoDispose(Func<ValueTask> disposeCallback)
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) == 1)
+        {
+            return;
+        }
+
+        _lockHeldTimer.Stop();
+
+        using var loggerScope = EventLogger?.DefaultScope();
+
+        Exception? error = null;
+        var stopwatch = Stopwatch.StartNew();
+        try
+        {
+            await disposeCallback().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            error = ex;
+            throw;
+        }
+        finally
+        {
+            stopwatch.Stop();
+
+            // TODO: human readable result
+            if (error != null)
+            {
+                EventLogger?.LogReleaseFailed(stopwatch.Elapsed, error);
+            }
+            else
+            {
+                EventLogger?.LogReleased(stopwatch.Elapsed, _lockHeldTimer.Elapsed);
+            }
+
+            _isAcquired = false;
+        }
     }
 }
