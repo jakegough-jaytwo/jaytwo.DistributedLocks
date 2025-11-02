@@ -48,8 +48,8 @@ public sealed class MySqlDistributedLockProvider : DbDistributedLockProvider<DbC
         }
 
         var lockAttemptId = Guid.NewGuid();
-        var qualifiedResourcePlain = string.IsNullOrEmpty(LockNamespace) ? resource : $"{LockNamespace}:{resource}";
-        var qualifiedResourceHash = HashStringToHex(qualifiedResourcePlain); // hashing to avoid 64 char limit in mysql
+        var qualifiedResource = string.IsNullOrEmpty(LockNamespace) ? resource : $"{LockNamespace}:{resource}";
+        var qualifiedResourceHash = HashStringToHex(qualifiedResource); // hashing to avoid 64 char limit in mysql
         var effectiveWaitSeconds = waitSeconds ?? DefaultLockWaitSeconds;
         var effectiveWaitTime = TimeSpan.FromSeconds(effectiveWaitSeconds);
 
@@ -61,7 +61,7 @@ public sealed class MySqlDistributedLockProvider : DbDistributedLockProvider<DbC
             requestWaitTime: waitSeconds.HasValue ? TimeSpan.FromSeconds(waitSeconds.Value) : null,
             effectiveWaitTime: effectiveWaitTime,
             extraConfig: x => x.WithFields(
-                ("qualified_resource_plain", qualifiedResourcePlain),
+                ("qualified_resource", qualifiedResource),
                 ("qualified_resource_hash", qualifiedResourceHash)));
 
         return await CreateLockAsync(qualifiedResourceHash, effectiveWaitSeconds, eventLogger, cancellationToken);

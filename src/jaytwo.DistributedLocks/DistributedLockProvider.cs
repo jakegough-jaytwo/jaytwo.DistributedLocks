@@ -76,11 +76,11 @@ public abstract class DistributedLockProvider : IDistributedLockProvider
         return !string.IsNullOrEmpty(value);
     }
 
-    internal static TimeSpan GetEffectiveTimeout(TimeSpan? timeout, int defaultTimeoutSeconds)
+    internal static TimeSpan GetEffectiveWaitTime(TimeSpan? timeout, int defaultTimeoutSeconds)
         => timeout ?? TimeSpan.FromSeconds(defaultTimeoutSeconds);
 
-    internal static int GetEffectiveTimeoutMs(TimeSpan? timeout, int defaultTimeoutSeconds)
-        => (int)Math.Ceiling(GetEffectiveTimeout(timeout, defaultTimeoutSeconds).TotalMilliseconds);
+    internal static int GetEffectiveWaitMs(TimeSpan? timeout, int defaultTimeoutSeconds)
+        => (int)Math.Ceiling(GetEffectiveWaitTime(timeout, defaultTimeoutSeconds).TotalMilliseconds);
 
     protected internal static string DefaultLockNamespace(ILogger? logger)
     {
@@ -138,9 +138,9 @@ public abstract class DistributedLockProvider : IDistributedLockProvider
     protected EventLogger? GetEventLogger(string resource, object providerResource, Guid lockAttemptId)
         => Logger != null ? new EventLogger(Logger, this, resource, providerResource, lockAttemptId) : null;
 
-    protected TimeSpan GetEffectiveTimeout(TimeSpan? timeout)
-        => GetEffectiveTimeout(timeout, DefaultLockWaitSeconds);
+    protected TimeSpan GetEffectiveWaitTime(TimeSpan? waitTime)
+        => GetEffectiveWaitTime(waitTime, DefaultLockWaitSeconds);
 
-    protected int GetEffectiveTimeoutMs(TimeSpan? timeout)
-        => GetEffectiveTimeoutMs(timeout, DefaultLockWaitSeconds);
+    protected int GetEffectiveWaitMs(TimeSpan? waitTime)
+        => GetEffectiveWaitMs(waitTime, DefaultLockWaitSeconds);
 }

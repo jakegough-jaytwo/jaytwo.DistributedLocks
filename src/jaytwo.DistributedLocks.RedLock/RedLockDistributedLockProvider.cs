@@ -48,7 +48,7 @@ public sealed class RedLockDistributedLockProvider : DistributedLockProvider, ID
 
         var lockAttemptId = Guid.NewGuid();
         var qualifiedResource = string.IsNullOrEmpty(LockNamespace) ? resource : $"{LockNamespace}:{resource}";
-        var effectiveWaitTime = waitTime ?? TimeSpan.FromSeconds(DefaultLockWaitSeconds);
+        var effectiveWaitTime = GetEffectiveWaitTime(waitTime);
         var effectiveExpiryTime = expiryTime ?? DefaultExpiry;
         var effectiveRetryTime = retryTime ?? DefaultRetry;
 

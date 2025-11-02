@@ -55,10 +55,10 @@ public sealed class PostgresDistributedLockProvider : DbDistributedLockProvider<
         }
 
         var lockAttemptId = Guid.NewGuid();
-        var qualifiedResourcePlain = string.IsNullOrEmpty(LockNamespace) ? resource : $"{LockNamespace}:{resource}";
-        var qualifiedResourceHash = HashStringToLong(qualifiedResourcePlain);
-        var effectiveTimeoutMs = GetEffectiveTimeoutMs(waitTime);
-        var effectiveWaitTime = TimeSpan.FromMilliseconds(effectiveTimeoutMs);
+        var qualifiedResource = string.IsNullOrEmpty(LockNamespace) ? resource : $"{LockNamespace}:{resource}";
+        var qualifiedResourceHash = HashStringToLong(qualifiedResource);
+        var effectiveWaitMs = GetEffectiveWaitMs(waitTime);
+        var effectiveWaitTime = TimeSpan.FromMilliseconds(effectiveWaitMs);
 
         var eventLogger = GetEventLogger(resource, qualifiedResourceHash, lockAttemptId);
         using var loggerScope = eventLogger?.DefaultScope();
@@ -68,10 +68,10 @@ public sealed class PostgresDistributedLockProvider : DbDistributedLockProvider<
             requestWaitTime: waitTime,
             effectiveWaitTime: effectiveWaitTime,
             extraConfig: x => x.WithFields(
-                ("qualified_resource_plain", qualifiedResourcePlain),
+                ("qualified_resource", qualifiedResource),
                 ("qualified_resource_hash", qualifiedResourceHash)));
 
-        return await CreateLockAsync(qualifiedResourceHash, effectiveTimeoutMs, eventLogger, cancellationToken);
+        return await CreateLockAsync(qualifiedResourceHash, effectiveWaitMs, eventLogger, cancellationToken);
     }
 
     internal async Task<IDistributedLock> CreateLockAsync(long lockKey, int effectiveTimeoutMs, EventLogger? eventLogger, CancellationToken cancellationToken)

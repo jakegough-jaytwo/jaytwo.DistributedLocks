@@ -39,7 +39,7 @@ public sealed class InProcessLockProvider : DistributedLockProvider, IDistribute
     {
         var lockAttemptId = Guid.NewGuid();
         var qualifiedResource = string.IsNullOrEmpty(LockNamespace) ? resource : $"{LockNamespace}:{resource}";
-        var effectiveWaitTime = waitTime ?? TimeSpan.FromSeconds(DefaultLockWaitSeconds);
+        var effectiveWaitTime = GetEffectiveWaitTime(waitTime);
 
         // TODO: raw/requested resource, raw/requested waitTime plus qualifiedResource and effectiveWaitTime
         var eventLogger = GetEventLogger(resource, qualifiedResource, lockAttemptId);
