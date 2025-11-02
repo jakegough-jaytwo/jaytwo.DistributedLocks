@@ -19,13 +19,13 @@ public static class LoggerExtensions
     public static IDisposable? BeginScope(this ILogger? logger, params (string Key, object? Value)[] values)
         => BeginScope(logger, values.ToDictionary(x => x.Key, x => x.Value));
 
-    public static IDisposable? BeginScope(this ILogger? logger, params IEnumerable<KeyValuePair<string, object?>> values)
+    public static IDisposable? BeginScope(this ILogger? logger, IEnumerable<KeyValuePair<string, object?>> values)
         => BeginScope(logger, values.ToDictionary(x => x.Key, x => x.Value));
 
     public static IDisposable? BeginScope(this ILogger? logger, params KeyValuePair<string, object?>[] values)
         => BeginScope(logger, values.ToDictionary(x => x.Key, x => x.Value));
 
-    public static IDisposable? BeginScope<T>(this ILogger? logger, params IEnumerable<KeyValuePair<string, T>> values)
+    public static IDisposable? BeginScope<T>(this ILogger? logger, IEnumerable<KeyValuePair<string, T>> values)
         => BeginScope(logger, values.ToDictionary(x => x.Key, x => x.Value));
 
     public static IDisposable? BeginScope<T>(this ILogger? logger, params KeyValuePair<string, T>[] values)
