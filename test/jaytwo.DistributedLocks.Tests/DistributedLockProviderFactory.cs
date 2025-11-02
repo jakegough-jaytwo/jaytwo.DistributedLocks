@@ -6,6 +6,7 @@ using jaytwo.DistributedLocks.Postgres;
 using jaytwo.DistributedLocks.RedLock;
 using jaytwo.DistributedLocks.SqlServer;
 using Microsoft.Extensions.Logging;
+using MySqlConnector;
 using RedLockNet;
 using RedLockNet.SERedis;
 using RedLockNet.SERedis.Configuration;
@@ -28,7 +29,7 @@ public class DistributedLockProviderFactory
         string sqlServerConnectionString,
         string redisConnectionString)
     {
-        _mySqlLockProvider = () => MySqlDistributedLockProvider.CreateWithDefaultLockNamespace(mySqlConnectionString, logger);
+        _mySqlLockProvider = () => MySqlDistributedLockProvider.CreateWithDefaultLockNamespace(() => new MySqlConnection(mySqlConnectionString), logger);
         _postgresLockProvider = () => PostgresDistributedLockProvider.CreateWithDefaultLockNamespace(postgresConnectionString, logger);
         _sqlServerLockProvider = () => SqlServerDistributedLockProvider.CreateWithDefaultLockNamespace(sqlServerConnectionString, logger);
         //_sqlServerLockProvider = () => SqlServerDistributedLockProvider.CreateWithDefaultLockNamespace(sqlServerConnectionString, logger);

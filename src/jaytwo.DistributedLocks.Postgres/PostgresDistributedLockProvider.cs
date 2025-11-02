@@ -20,6 +20,11 @@ public sealed class PostgresDistributedLockProvider : DbDistributedLockProvider<
     {
     }
 
+    public PostgresDistributedLockProvider(NpgsqlDataSource dataSource, string lockNamespace, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
+        : base(PostgresProviderName, dataSource.CreateConnection, lockNamespace, defaultLockWaitSeconds, logger)
+    {
+    }
+
     public PostgresDistributedLockProvider(Func<NpgsqlConnection> connectionFactory, string lockNamespace, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
         : base(PostgresProviderName, connectionFactory, lockNamespace, defaultLockWaitSeconds, logger)
     {
@@ -27,6 +32,9 @@ public sealed class PostgresDistributedLockProvider : DbDistributedLockProvider<
 
     public static PostgresDistributedLockProvider CreateWithDefaultLockNamespace(string connectionString, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
         => new(connectionString, DefaultLockNamespace(logger), logger, defaultLockWaitSeconds);
+
+    public static PostgresDistributedLockProvider CreateWithDefaultLockNamespace(NpgsqlDataSource dataSource, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
+        => new(dataSource, DefaultLockNamespace(logger), logger, defaultLockWaitSeconds);
 
     public static PostgresDistributedLockProvider CreateWithDefaultLockNamespace(Func<NpgsqlConnection> connectionFactory, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
         => new(connectionFactory, DefaultLockNamespace(logger), logger, defaultLockWaitSeconds);

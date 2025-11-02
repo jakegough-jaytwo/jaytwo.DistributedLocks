@@ -1,3 +1,5 @@
+using System;
+using System.Data.Common;
 using DistributedLocksSampleApp;
 using jaytwo.DistributedLocks.MySql;
 using jaytwo.DistributedLocks.Postgres;
@@ -8,7 +10,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using MySql.Data.MySqlClient;
+using MySqlConnector;
 using Npgsql;
 using RedLockNet;
 
@@ -26,42 +28,53 @@ builder.Services
     });
 
 // TODO: make logging automagic with DI... which probably means making DI'ing an options object and injecting that automagically into the provider
-builder.Services.AddScoped(x =>
+
+// Postgres DI example
+builder.Services.AddSingleton(sp => NpgsqlDataSource.Create(
+    sp.GetRequiredService<IConfiguration>().GetConnectionString("PostgresDb")
+        ?? throw new InvalidOperationException("Missing PostgresDb connection string.")));
+
+builder.Services.AddSingleton(x =>
 {
-    var config = x.GetRequiredService<IConfiguration>();
-    var connectionString = config["ConnectionStrings:PostgresDb"];
-    var connectionFactory = () => new NpgsqlConnection(connectionString);
-    var logger = x.GetRequiredService<ILogger<PostgresDistributedLockProvider>>();
-    return PostgresDistributedLockProvider.CreateWithDefaultLockNamespace(connectionFactory, logger);
+    var dataSource = x.GetRequiredService<NpgsqlDataSource>();
+    var logger = x.GetService<ILogger<PostgresDistributedLockProvider>>();
+    return PostgresDistributedLockProvider.CreateWithDefaultLockNamespace(dataSource, logger);
 });
 
-builder.Services.AddScoped(x =>
+// MySql DI example
+builder.Services.AddSingleton(sp => new MySqlDataSource(
+    sp.GetRequiredService<IConfiguration>().GetConnectionString("MySqlDb")
+        ?? throw new InvalidOperationException("Missing MySqlDb connection string.")));
+
+builder.Services.AddSingleton(x =>
 {
-    var config = x.GetRequiredService<IConfiguration>();
-    var connectionString = config["ConnectionStrings:MySqlDb"];
-    var connectionFactory = () => new MySqlConnection(connectionString);
-    var logger = x.GetRequiredService<ILogger<MySqlDistributedLockProvider>>();
-    return MySqlDistributedLockProvider.CreateWithDefaultLockNamespace(connectionFactory, logger);
+    var dataSource = x.GetRequiredService<MySqlDataSource>();
+    var logger = x.GetService<ILogger<MySqlDistributedLockProvider>>();
+    return MySqlDistributedLockProvider.CreateWithDefaultLockNamespace(dataSource, logger);
 });
 
-builder.Services.AddScoped(x =>
+// SqlServer DI example
+builder.Services.AddKeyedSingleton("SqlServerDb", (sp, _) => SqlClientFactory.Instance.CreateDataSource(
+    sp.GetRequiredService<IConfiguration>().GetConnectionString("SqlServerDb")
+        ?? throw new InvalidOperationException("Missing SqlServerDb connection string.")));
+
+builder.Services.AddSingleton(x =>
 {
-    var config = x.GetRequiredService<IConfiguration>();
-    var connectionString = config["ConnectionStrings:SqlServerDb"];
-    var connectionFactory = () => new SqlConnection(connectionString);
-    var logger = x.GetRequiredService<ILogger<SqlServerDistributedLockProvider>>();
-    return SqlServerDistributedLockProvider.CreateWithDefaultLockNamespace(connectionFactory, logger);
+    var dataSource = x.GetRequiredKeyedService<DbDataSource>("SqlServerDb");
+    var logger = x.GetService<ILogger<SqlServerDistributedLockProvider>>();
+    return SqlServerDistributedLockProvider.CreateWithDefaultLockNamespace(dataSource, logger);
 });
 
+// Redis DI example
 RedisSetup.ConfigureRedis(builder.Services, "sampleapp");
 builder.Services.AddScoped(x =>
 {
-    var config = x.GetRequiredService<IConfiguration>();
     var redLockFactory = x.GetRequiredService<IDistributedLockFactory>();
-    var logger = x.GetRequiredService<ILogger<RedLockDistributedLockProvider>>();
+    var logger = x.GetService<ILogger<RedLockDistributedLockProvider>>();
     return RedLockDistributedLockProvider.CreateWithDefaultLockNamespace(redLockFactory, logger);
 });
 
+// resume the app bulid
 var app = builder.Build();
 
 app.MapControllers();

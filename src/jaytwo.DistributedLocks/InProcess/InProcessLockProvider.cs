@@ -110,7 +110,7 @@ public sealed class InProcessLockProvider : DistributedLockProvider, IDistribute
         {
             stopwatch.Stop();
 
-            // TODO: whould we downgrade to warning because we re-throw the exception?
+            // TODO: should we downgrade to warning because we re-throw the exception?
             eventLogger?.LogCancelled(stopwatch.Elapsed, ex);
             throw;
         }
@@ -118,7 +118,7 @@ public sealed class InProcessLockProvider : DistributedLockProvider, IDistribute
         {
             stopwatch.Stop();
 
-            // TODO: whould we downgrade to warning because we re-throw the exception?
+            // TODO: should we downgrade to warning because we re-throw the exception?
             eventLogger?.LogError(stopwatch.Elapsed, ex);
             throw;
         }

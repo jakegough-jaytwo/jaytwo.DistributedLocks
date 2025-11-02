@@ -1,5 +1,5 @@
 using System.Threading.Tasks;
-using MySql.Data.MySqlClient;
+using MySqlConnector;
 using Xunit;
 using Xunit.Abstractions;
 

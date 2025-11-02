@@ -1,40 +1,38 @@
 using System;
 using System.Data;
+using System.Data.Common;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
 using jaytwo.DistributedLocks.Logging;
 using Microsoft.Extensions.Logging;
-using MySql.Data.MySqlClient;
 
 namespace jaytwo.DistributedLocks.MySql;
 
-public sealed class MySqlDistributedLockProvider : DbDistributedLockProvider<MySqlConnection>, IDistributedLockProvider
+public sealed class MySqlDistributedLockProvider : DbDistributedLockProvider<DbConnection>, IDistributedLockProvider
 {
     internal const string MySqlProviderName = "MySql";
     internal const int DefaultLockWaitSecondsFallback = 30;
 
-    public MySqlDistributedLockProvider(string connectionString, string lockNamespace, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
-        : this(() => new MySqlConnection(connectionString), lockNamespace, logger, defaultLockWaitSeconds)
+#if NET8_0_OR_GREATER
+    public MySqlDistributedLockProvider(DbDataSource dataSource, string lockNamespace, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
+        : base(MySqlProviderName, dataSource.CreateConnection, lockNamespace, defaultLockWaitSeconds, logger)
     {
     }
+#endif
 
-    public MySqlDistributedLockProvider(Func<MySqlConnection> connectionFactory, string lockNamespace, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
+    public MySqlDistributedLockProvider(Func<DbConnection> connectionFactory, string lockNamespace, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
         : base(MySqlProviderName, connectionFactory, lockNamespace, defaultLockWaitSeconds, logger)
     {
-        if (string.IsNullOrEmpty(lockNamespace))
-        {
-            throw new ArgumentException(
-                "No lock namespace provided. Provide a LockNamespace or use CreateWithDefaultLockNamespace().",
-                nameof(lockNamespace));
-        }
     }
 
-    public static MySqlDistributedLockProvider CreateWithDefaultLockNamespace(string connectionString, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
-        => new(connectionString, DefaultLockNamespace(logger), logger, defaultLockWaitSeconds);
+#if NET8_0_OR_GREATER
+    public static MySqlDistributedLockProvider CreateWithDefaultLockNamespace(DbDataSource dataSource, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
+        => new(dataSource, DefaultLockNamespace(logger), logger, defaultLockWaitSeconds);
+#endif
 
-    public static MySqlDistributedLockProvider CreateWithDefaultLockNamespace(Func<MySqlConnection> connectionFactory, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
+    public static MySqlDistributedLockProvider CreateWithDefaultLockNamespace(Func<DbConnection> connectionFactory, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
         => new(connectionFactory, DefaultLockNamespace(logger), logger, defaultLockWaitSeconds);
 
     public override async Task<IDistributedLock> CreateLockAsync(string resource, int? waitSeconds = default, CancellationToken cancellationToken = default)
@@ -97,19 +95,44 @@ public sealed class MySqlDistributedLockProvider : DbDistributedLockProvider<MyS
 
     protected override object HealthCheckConnectionStringDetails(string connectionString)
     {
-        var connectionStringBuilder = new MySqlConnectionStringBuilder(connectionString);
+        var connectionStringBuilder = new DbConnectionStringBuilder { ConnectionString = connectionString };
 
-        return new
+        string? host = GetFirst(connectionStringBuilder, "Server", "Host", "Data Source", "DataSource", "Addr", "Address", "Network Address");
+        string? database = GetFirst(connectionStringBuilder, "Database", "Initial Catalog");
+        string? user = GetFirst(connectionStringBuilder, "User Id", "Uid", "Username", "UserID", "User Name");
+        int? port = TryGetInt(connectionStringBuilder, out var p, "Port") ? p : null;
+
+        return new { Server = host, Port = port, Database = database, UserID = user };
+
+        static string? GetFirst(DbConnectionStringBuilder b, params string[] keys)
         {
-            connectionStringBuilder.Server,
-            connectionStringBuilder.Port,
-            connectionStringBuilder.Database,
-            connectionStringBuilder.UserID,
-            connectionStringBuilder.Pooling,
-        };
+            foreach (var k in keys)
+            {
+                if (b.TryGetValue(k, out var value) && value is not null)
+                {
+                    return value.ToString();
+                }
+            }
+
+            return null;
+        }
+
+        static bool TryGetInt(DbConnectionStringBuilder b, out int value, params string[] keys)
+        {
+            foreach (var k in keys)
+            {
+                if (b.TryGetValue(k, out var v) && v is not null && int.TryParse(v.ToString(), out value))
+                {
+                    return true;
+                }
+            }
+
+            value = default;
+            return false;
+        }
     }
 
-    protected override async Task<object> HealthCheckServerDataAsync(MySqlConnection connection, CancellationToken cancellationToken)
+    protected override async Task<object> HealthCheckServerDataAsync(DbConnection connection, CancellationToken cancellationToken)
     {
         var serverInfo = await QuerySingleAnonymousAsync(
             connection,
@@ -125,7 +148,7 @@ public sealed class MySqlDistributedLockProvider : DbDistributedLockProvider<MyS
         };
     }
 
-    private async Task<bool> GetLockAsync(MySqlConnection connection, string name, int timeoutSeconds, EventLogger? eventLogger, CancellationToken cancellationToken)
+    private async Task<bool> GetLockAsync(DbConnection connection, string name, int timeoutSeconds, EventLogger? eventLogger, CancellationToken cancellationToken)
     {
         using var loggerScope = eventLogger?.Scope(x => x.WithFields(("sql_command", "GET_LOCK")));
         const string query = "SELECT GET_LOCK(@name, @timeout)";

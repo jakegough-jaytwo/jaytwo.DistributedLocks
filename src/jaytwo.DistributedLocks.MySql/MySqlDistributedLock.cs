@@ -1,23 +1,23 @@
 using System;
+using System.Data.Common;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
 using jaytwo.DistributedLocks.Logging;
-using MySql.Data.MySqlClient;
 
 namespace jaytwo.DistributedLocks.MySql;
 
 public sealed class MySqlDistributedLock : DistributedLock<MySqlDistributedLockProvider, string>, IDistributedLock, IDisposable, IAsyncDisposable
 {
-    private readonly MySqlConnection _connection;
+    private readonly DbConnection _connection;
 
     private readonly Stopwatch _lockHeldTimer;
 
     private int _disposed;
     private bool _released;
 
-    public MySqlDistributedLock(MySqlDistributedLockProvider provider, MySqlConnection connection, string name, EventLogger? eventLogger)
+    public MySqlDistributedLock(MySqlDistributedLockProvider provider, DbConnection connection, string name, EventLogger? eventLogger)
         : base(provider, name, eventLogger)
     {
         _connection = connection ?? throw new ArgumentNullException(nameof(connection));

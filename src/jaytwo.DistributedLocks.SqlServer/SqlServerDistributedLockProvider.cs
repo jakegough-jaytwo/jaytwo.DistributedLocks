@@ -1,5 +1,6 @@
 using System;
 using System.Data;
+using System.Data.Common;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
@@ -10,7 +11,7 @@ using Microsoft.Extensions.Logging;
 
 namespace jaytwo.DistributedLocks.SqlServer;
 
-public sealed class SqlServerDistributedLockProvider : DbDistributedLockProvider<SqlConnection>, IDistributedLockProvider
+public sealed class SqlServerDistributedLockProvider : DbDistributedLockProvider<DbConnection>, IDistributedLockProvider
 {
     internal const string SqlServerProviderName = "SqlServer";
     internal const int DefaultLockWaitSecondsFallback = 30;
@@ -26,7 +27,14 @@ public sealed class SqlServerDistributedLockProvider : DbDistributedLockProvider
     {
     }
 
-    public SqlServerDistributedLockProvider(Func<SqlConnection> connectionFactory, string lockNamespace, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
+#if NET8_0_OR_GREATER
+    public SqlServerDistributedLockProvider(DbDataSource dataSource, string lockNamespace, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
+        : base(SqlServerProviderName, dataSource.CreateConnection, lockNamespace, defaultLockWaitSeconds, logger)
+    {
+    }
+#endif
+
+    public SqlServerDistributedLockProvider(Func<DbConnection> connectionFactory, string lockNamespace, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
         : base(SqlServerProviderName, connectionFactory, lockNamespace, defaultLockWaitSeconds, logger)
     {
     }
@@ -34,7 +42,12 @@ public sealed class SqlServerDistributedLockProvider : DbDistributedLockProvider
     public static SqlServerDistributedLockProvider CreateWithDefaultLockNamespace(string connectionString, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
         => new(connectionString, DefaultLockNamespace(logger), logger, defaultLockWaitSeconds);
 
-    public static SqlServerDistributedLockProvider CreateWithDefaultLockNamespace(Func<SqlConnection> connectionFactory, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
+#if NET8_0_OR_GREATER
+    public static SqlServerDistributedLockProvider CreateWithDefaultLockNamespace(DbDataSource dataSource, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
+        => new(dataSource, DefaultLockNamespace(logger), logger, defaultLockWaitSeconds);
+#endif
+
+    public static SqlServerDistributedLockProvider CreateWithDefaultLockNamespace(Func<DbConnection> connectionFactory, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
         => new(connectionFactory, DefaultLockNamespace(logger), logger, defaultLockWaitSeconds);
 
     public override async Task<IDistributedLock> CreateLockAsync(string resource, int? waitSeconds = default, CancellationToken cancellationToken = default)
@@ -135,7 +148,7 @@ public sealed class SqlServerDistributedLockProvider : DbDistributedLockProvider
         };
     }
 
-    protected override async Task<object> HealthCheckServerDataAsync(SqlConnection connection, CancellationToken cancellationToken)
+    protected override async Task<object> HealthCheckServerDataAsync(DbConnection connection, CancellationToken cancellationToken)
     {
         var serverInfo = await QuerySingleAnonymousAsync(
             connection,
@@ -153,7 +166,7 @@ public sealed class SqlServerDistributedLockProvider : DbDistributedLockProvider
     private async Task<T> QuerySingleAnonymousAsync<T>(IDbConnection connection, string sql, T prototype, CancellationToken cancellationToken)
         => await connection.QuerySingleAsync<T>(new CommandDefinition(sql, cancellationToken: cancellationToken)).ConfigureAwait(false);
 
-    private async Task<bool> SpGetAppLock(string providerResource, int timeoutMs, SqlConnection connection, SqlTransaction transaction, EventLogger? eventLogger, CancellationToken cancellationToken)
+    private async Task<bool> SpGetAppLock(string providerResource, int timeoutMs, DbConnection connection, DbTransaction transaction, EventLogger? eventLogger, CancellationToken cancellationToken)
     {
         if (providerResource is null)
         {

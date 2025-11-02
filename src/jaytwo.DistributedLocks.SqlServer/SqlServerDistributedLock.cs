@@ -1,4 +1,5 @@
 using System;
+using System.Data.Common;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
@@ -9,8 +10,8 @@ namespace jaytwo.DistributedLocks.SqlServer;
 
 public sealed class SqlServerDistributedLock : DistributedLock<SqlServerDistributedLockProvider, string>, IDistributedLock, IDisposable, IAsyncDisposable
 {
-    private readonly SqlConnection _connection;
-    private readonly SqlTransaction _transaction;
+    private readonly DbConnection _connection;
+    private readonly DbTransaction _transaction;
 
     private readonly Stopwatch _lockHeldTimer;
 
@@ -19,8 +20,8 @@ public sealed class SqlServerDistributedLock : DistributedLock<SqlServerDistribu
 
     public SqlServerDistributedLock(
         SqlServerDistributedLockProvider provider,
-        SqlConnection connection,
-        SqlTransaction transaction,
+        DbConnection connection,
+        DbTransaction transaction,
         string providerResource,
         EventLogger? eventLogger)
         : base(provider, providerResource, eventLogger)
