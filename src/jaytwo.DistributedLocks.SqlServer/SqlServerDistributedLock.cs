@@ -23,7 +23,7 @@ public sealed class SqlServerDistributedLock : DistributedLock<SqlServerDistribu
         DbConnection connection,
         DbTransaction transaction,
         string providerResource,
-        EventLogger? eventLogger)
+        LockEventLogger? eventLogger)
         : base(provider, providerResource, eventLogger)
     {
         _connection = connection ?? throw new ArgumentNullException(nameof(connection));

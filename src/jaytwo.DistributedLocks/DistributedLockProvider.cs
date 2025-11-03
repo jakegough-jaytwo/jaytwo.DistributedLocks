@@ -82,29 +82,25 @@ public abstract class DistributedLockProvider : IDistributedLockProvider
     internal static int GetEffectiveWaitMs(TimeSpan? timeout, int defaultTimeoutSeconds)
         => (int)Math.Ceiling(GetEffectiveWaitTime(timeout, defaultTimeoutSeconds).TotalMilliseconds);
 
-    protected internal static string DefaultLockNamespace(ILogger? logger)
+    internal static string DefaultLockNamespace(ProviderEventLogger? eventLogger)
     {
         var applicationName = Assembly.GetEntryAssembly()?.GetName().Name ?? AppDomain.CurrentDomain.FriendlyName;
 
         if (TryGetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", out var environmentName) || TryGetEnvironmentVariable("DOTNET_ENVIRONMENT", out environmentName))
         {
             var lockNamespace = $"{applicationName}:{environmentName}";
-
-            logger?.BuildMessage("Using default lock namespace: '{lock_namespace}'", lockNamespace)
-                .WithFields(("application_name", applicationName), ("environment_name", environmentName))
-                .Information();
-
+            eventLogger?.LogUsingDefaultNamespace(lockNamespace, applicationName, environmentName!);
             return lockNamespace;
         }
         else
         {
-            logger?.BuildMessage("Using default lock namespace without environment name: '{lock_namespace}'.  Collisions between environments are likely.", applicationName)
-                .WithFields(("application_name", applicationName))
-                .Warning();
-
+            eventLogger?.LogUsingDefaultNamespaceWithoutEnvironmentName(applicationName, applicationName);
             return applicationName;
         }
     }
+
+    protected internal static string DefaultLockNamespace(ILogger? logger, string providerName)
+        => DefaultLockNamespace(new ProviderEventLogger(logger, providerName));
 
     protected internal static long HashStringToLong(string input)
     {
@@ -135,8 +131,8 @@ public abstract class DistributedLockProvider : IDistributedLockProvider
         };
     }
 
-    protected EventLogger? GetEventLogger(string resource, object providerResource, Guid lockAttemptId)
-        => Logger != null ? new EventLogger(Logger, this, resource, providerResource, lockAttemptId) : null;
+    protected LockEventLogger? GetEventLogger(string resource, object providerResource, Guid lockAttemptId)
+        => Logger != null ? new LockEventLogger(Logger, this, resource, providerResource, lockAttemptId) : null;
 
     protected TimeSpan GetEffectiveWaitTime(TimeSpan? waitTime)
         => GetEffectiveWaitTime(waitTime, DefaultLockWaitSeconds);

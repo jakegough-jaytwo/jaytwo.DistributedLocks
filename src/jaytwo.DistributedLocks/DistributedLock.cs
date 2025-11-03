@@ -6,7 +6,7 @@ namespace jaytwo.DistributedLocks;
 public abstract class DistributedLock<TProvider, TResource>
     where TProvider : DistributedLockProvider
 {
-    public DistributedLock(TProvider provider, TResource providerResource, EventLogger? eventLogger)
+    public DistributedLock(TProvider provider, TResource providerResource, LockEventLogger? eventLogger)
     {
         Provider = provider ?? throw new ArgumentNullException(nameof(provider));
         //LockAttemptId = lockAttemptId;
@@ -33,7 +33,7 @@ public abstract class DistributedLock<TProvider, TResource>
 
     public abstract bool IsAcquired { get; }
 
-    protected EventLogger? EventLogger { get; }
+    protected LockEventLogger? EventLogger { get; }
 
     protected TProvider Provider { get; }
 }

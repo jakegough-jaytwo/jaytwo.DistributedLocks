@@ -31,13 +31,13 @@ public sealed class PostgresDistributedLockProvider : DbDistributedLockProvider<
     }
 
     public static PostgresDistributedLockProvider CreateWithDefaultLockNamespace(string connectionString, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
-        => new(connectionString, DefaultLockNamespace(logger), logger, defaultLockWaitSeconds);
+        => new(connectionString, DefaultLockNamespace(logger, PostgresProviderName), logger, defaultLockWaitSeconds);
 
     public static PostgresDistributedLockProvider CreateWithDefaultLockNamespace(NpgsqlDataSource dataSource, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
-        => new(dataSource, DefaultLockNamespace(logger), logger, defaultLockWaitSeconds);
+        => new(dataSource, DefaultLockNamespace(logger, PostgresProviderName), logger, defaultLockWaitSeconds);
 
     public static PostgresDistributedLockProvider CreateWithDefaultLockNamespace(Func<NpgsqlConnection> connectionFactory, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
-        => new(connectionFactory, DefaultLockNamespace(logger), logger, defaultLockWaitSeconds);
+        => new(connectionFactory, DefaultLockNamespace(logger, PostgresProviderName), logger, defaultLockWaitSeconds);
 
     public override async Task<IDistributedLock> CreateLockAsync(string resource, int? waitSeconds = default, CancellationToken cancellationToken = default)
         => await CreateLockAsync(resource, waitSeconds.HasValue ? TimeSpan.FromSeconds(waitSeconds.Value) : null, cancellationToken).ConfigureAwait(false);
@@ -74,7 +74,7 @@ public sealed class PostgresDistributedLockProvider : DbDistributedLockProvider<
         return await CreateLockAsync(qualifiedResourceHash, effectiveWaitMs, eventLogger, cancellationToken);
     }
 
-    internal async Task<IDistributedLock> CreateLockAsync(long lockKey, int effectiveTimeoutMs, EventLogger? eventLogger, CancellationToken cancellationToken)
+    internal async Task<IDistributedLock> CreateLockAsync(long lockKey, int effectiveTimeoutMs, LockEventLogger? eventLogger, CancellationToken cancellationToken)
     {
         Func<NpgsqlConnection, NpgsqlTransaction, CancellationToken, Task<bool>> advisoryLockDelegate;
 
@@ -119,7 +119,7 @@ public sealed class PostgresDistributedLockProvider : DbDistributedLockProvider<
         };
     }
 
-    private async Task<bool> PgTryAdvisoryLock(long key, NpgsqlConnection connection, NpgsqlTransaction transaction, EventLogger? eventLogger, CancellationToken cancellationToken)
+    private async Task<bool> PgTryAdvisoryLock(long key, NpgsqlConnection connection, NpgsqlTransaction transaction, LockEventLogger? eventLogger, CancellationToken cancellationToken)
     {
         using var loggerScope = eventLogger?.Scope(x => x.WithFields(("sql_command", "pg_try_advisory_xact_lock")));
         const string query = "SELECT pg_try_advisory_xact_lock(@key)";
@@ -158,7 +158,7 @@ public sealed class PostgresDistributedLockProvider : DbDistributedLockProvider<
         return returnValue;
     }
 
-    private async Task<bool> PgAdvisoryLock(long key, int statementTimeoutMs, NpgsqlConnection connection, NpgsqlTransaction transaction, EventLogger? eventLogger, CancellationToken cancellationToken)
+    private async Task<bool> PgAdvisoryLock(long key, int statementTimeoutMs, NpgsqlConnection connection, NpgsqlTransaction transaction, LockEventLogger? eventLogger, CancellationToken cancellationToken)
     {
         if (statementTimeoutMs < 0)
         {
@@ -224,7 +224,7 @@ public sealed class PostgresDistributedLockProvider : DbDistributedLockProvider<
     private async Task<IDistributedLock> GetAdvisoryLock(
         Func<NpgsqlConnection, NpgsqlTransaction, CancellationToken, Task<bool>> advisoryLockDelegate,
         long key,
-        EventLogger? eventLogger,
+        LockEventLogger? eventLogger,
         CancellationToken cancellationToken)
     {
         bool acquired = false;

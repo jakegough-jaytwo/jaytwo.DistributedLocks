@@ -13,7 +13,7 @@ public sealed class InProcessLock : DistributedLock<InProcessLockProvider, strin
     private bool _isAcquired;
     private volatile bool _disposed;
 
-    public InProcessLock(InProcessLockProvider provider, IDisposable releaser, string providerResource, EventLogger? eventLogger)
+    public InProcessLock(InProcessLockProvider provider, IDisposable releaser, string providerResource, LockEventLogger? eventLogger)
         : base(provider, providerResource, eventLogger)
     {
         _releaser = releaser;

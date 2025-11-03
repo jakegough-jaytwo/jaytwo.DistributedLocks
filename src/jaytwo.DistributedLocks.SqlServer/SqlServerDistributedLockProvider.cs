@@ -40,15 +40,15 @@ public sealed class SqlServerDistributedLockProvider : DbDistributedLockProvider
     }
 
     public static SqlServerDistributedLockProvider CreateWithDefaultLockNamespace(string connectionString, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
-        => new(connectionString, DefaultLockNamespace(logger), logger, defaultLockWaitSeconds);
+        => new(connectionString, DefaultLockNamespace(logger, SqlServerProviderName), logger, defaultLockWaitSeconds);
 
 #if NET8_0_OR_GREATER
     public static SqlServerDistributedLockProvider CreateWithDefaultLockNamespace(DbDataSource dataSource, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
-        => new(dataSource, DefaultLockNamespace(logger), logger, defaultLockWaitSeconds);
+        => new(dataSource, DefaultLockNamespace(logger, SqlServerProviderName), logger, defaultLockWaitSeconds);
 #endif
 
     public static SqlServerDistributedLockProvider CreateWithDefaultLockNamespace(Func<DbConnection> connectionFactory, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
-        => new(connectionFactory, DefaultLockNamespace(logger), logger, defaultLockWaitSeconds);
+        => new(connectionFactory, DefaultLockNamespace(logger, SqlServerProviderName), logger, defaultLockWaitSeconds);
 
     public override async Task<IDistributedLock> CreateLockAsync(string resource, int? waitSeconds = default, CancellationToken cancellationToken = default)
         => await CreateLockAsync(resource, waitSeconds.HasValue ? TimeSpan.FromSeconds(waitSeconds.Value) : null, cancellationToken).ConfigureAwait(false);
@@ -103,7 +103,7 @@ public sealed class SqlServerDistributedLockProvider : DbDistributedLockProvider
         };
     }
 
-    internal async Task<IDistributedLock> CreateLockAsync(string qualifiedResourceHash, int effectiveTimeoutMs, EventLogger? eventLogger, CancellationToken cancellationToken)
+    internal async Task<IDistributedLock> CreateLockAsync(string qualifiedResourceHash, int effectiveTimeoutMs, LockEventLogger? eventLogger, CancellationToken cancellationToken)
     {
         bool acquired = false;
         var connection = ConnectionFactory.Invoke();
@@ -166,7 +166,7 @@ public sealed class SqlServerDistributedLockProvider : DbDistributedLockProvider
     private async Task<T> QuerySingleAnonymousAsync<T>(IDbConnection connection, string sql, T prototype, CancellationToken cancellationToken)
         => await connection.QuerySingleAsync<T>(new CommandDefinition(sql, cancellationToken: cancellationToken)).ConfigureAwait(false);
 
-    private async Task<bool> SpGetAppLock(string providerResource, int timeoutMs, DbConnection connection, DbTransaction transaction, EventLogger? eventLogger, CancellationToken cancellationToken)
+    private async Task<bool> SpGetAppLock(string providerResource, int timeoutMs, DbConnection connection, DbTransaction transaction, LockEventLogger? eventLogger, CancellationToken cancellationToken)
     {
         if (providerResource is null)
         {

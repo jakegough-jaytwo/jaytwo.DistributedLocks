@@ -18,7 +18,7 @@ public sealed class RedLockDistributedLock : DistributedLock<RedLockDistributedL
         RedLockDistributedLockProvider provider,
         IRedLock redLock,
         string providerResource,
-        EventLogger? eventLogger)
+        LockEventLogger? eventLogger)
         : base(provider, providerResource, eventLogger)
     {
         _redLock = redLock;

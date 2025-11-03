@@ -15,14 +15,14 @@ public class EventLoggerTests
         _output = output;
     }
 
-    public static EventLogger CreateEventLogger(
+    public static LockEventLogger CreateEventLogger(
         ILogger? logger = default,
         string? providerName = default,
         string? lockNamespace = default,
         string? resource = default,
         string? providerResource = default,
         Guid? lockAttemptId = default)
-        => new EventLogger(
+        => new LockEventLogger(
             logger,
             providerName: providerName ?? "noProvider",
             lockNamespace: lockNamespace ?? "noNamespace",

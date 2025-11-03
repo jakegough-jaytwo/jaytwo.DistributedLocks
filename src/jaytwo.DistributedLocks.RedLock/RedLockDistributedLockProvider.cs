@@ -31,7 +31,7 @@ public sealed class RedLockDistributedLockProvider : DistributedLockProvider, ID
     }
 
     public static RedLockDistributedLockProvider CreateWithDefaultLockNamespace(IDistributedLockFactory redLockFactory, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
-        => new(redLockFactory, DefaultLockNamespace(logger), logger, defaultLockWaitSeconds);
+        => new(redLockFactory, DefaultLockNamespace(logger, RedisProviderName), logger, defaultLockWaitSeconds);
 
     public override async Task<IDistributedLock> CreateLockAsync(string resource, int? waitSeconds = default, CancellationToken cancellationToken = default)
     {
@@ -66,7 +66,7 @@ public sealed class RedLockDistributedLockProvider : DistributedLockProvider, ID
         return await CreateLockAsync(qualifiedResource, effectiveExpiryTime, effectiveWaitTime, effectiveRetryTime, eventLogger, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<IDistributedLock> CreateLockAsync(string qualifiedResource, TimeSpan expiryTime, TimeSpan waitTime, TimeSpan retryTime, EventLogger? eventLogger, CancellationToken cancellationToken)
+    private async Task<IDistributedLock> CreateLockAsync(string qualifiedResource, TimeSpan expiryTime, TimeSpan waitTime, TimeSpan retryTime, LockEventLogger? eventLogger, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(qualifiedResource))
         {

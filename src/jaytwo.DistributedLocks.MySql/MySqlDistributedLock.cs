@@ -17,7 +17,7 @@ public sealed class MySqlDistributedLock : DistributedLock<MySqlDistributedLockP
     private int _disposed;
     private bool _released;
 
-    public MySqlDistributedLock(MySqlDistributedLockProvider provider, DbConnection connection, string name, EventLogger? eventLogger)
+    public MySqlDistributedLock(MySqlDistributedLockProvider provider, DbConnection connection, string name, LockEventLogger? eventLogger)
         : base(provider, name, eventLogger)
     {
         _connection = connection ?? throw new ArgumentNullException(nameof(connection));

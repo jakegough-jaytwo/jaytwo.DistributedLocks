@@ -22,7 +22,7 @@ public sealed class PostgresDistributedLock : DistributedLock<PostgresDistribute
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
         long key,
-        EventLogger? eventLogger)
+        LockEventLogger? eventLogger)
         : base(provider, key, eventLogger)
     {
         _connection = connection ?? throw new ArgumentNullException(nameof(connection));

@@ -78,7 +78,7 @@ public sealed class InProcessLockProvider : DistributedLockProvider, IDistribute
         }
     }
 
-    private async Task<IDistributedLock> CreateLockAsync(string qualifiedResource, TimeSpan waitTime, EventLogger? eventLogger, CancellationToken cancellationToken)
+    private async Task<IDistributedLock> CreateLockAsync(string qualifiedResource, TimeSpan waitTime, LockEventLogger? eventLogger, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(qualifiedResource))
         {

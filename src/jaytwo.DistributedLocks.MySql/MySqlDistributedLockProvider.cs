@@ -29,11 +29,11 @@ public sealed class MySqlDistributedLockProvider : DbDistributedLockProvider<DbC
 
 #if NET8_0_OR_GREATER
     public static MySqlDistributedLockProvider CreateWithDefaultLockNamespace(DbDataSource dataSource, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
-        => new(dataSource, DefaultLockNamespace(logger), logger, defaultLockWaitSeconds);
+        => new(dataSource, DefaultLockNamespace(logger, MySqlProviderName), logger, defaultLockWaitSeconds);
 #endif
 
     public static MySqlDistributedLockProvider CreateWithDefaultLockNamespace(Func<DbConnection> connectionFactory, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
-        => new(connectionFactory, DefaultLockNamespace(logger), logger, defaultLockWaitSeconds);
+        => new(connectionFactory, DefaultLockNamespace(logger, MySqlProviderName), logger, defaultLockWaitSeconds);
 
     public override async Task<IDistributedLock> CreateLockAsync(string resource, int? waitSeconds = default, CancellationToken cancellationToken = default)
     {
@@ -67,7 +67,7 @@ public sealed class MySqlDistributedLockProvider : DbDistributedLockProvider<DbC
         return await CreateLockAsync(qualifiedResourceHash, effectiveWaitSeconds, eventLogger, cancellationToken);
     }
 
-    internal async Task<IDistributedLock> CreateLockAsync(string name, int effectiveWaitSeconds, EventLogger? eventLogger, CancellationToken cancellationToken)
+    internal async Task<IDistributedLock> CreateLockAsync(string name, int effectiveWaitSeconds, LockEventLogger? eventLogger, CancellationToken cancellationToken)
     {
         bool acquired = false;
         var connection = ConnectionFactory.Invoke();
@@ -148,7 +148,7 @@ public sealed class MySqlDistributedLockProvider : DbDistributedLockProvider<DbC
         };
     }
 
-    private async Task<bool> GetLockAsync(DbConnection connection, string name, int timeoutSeconds, EventLogger? eventLogger, CancellationToken cancellationToken)
+    private async Task<bool> GetLockAsync(DbConnection connection, string name, int timeoutSeconds, LockEventLogger? eventLogger, CancellationToken cancellationToken)
     {
         using var loggerScope = eventLogger?.Scope(x => x.WithFields(("sql_command", "GET_LOCK")));
         const string query = "SELECT GET_LOCK(@name, @timeout)";
