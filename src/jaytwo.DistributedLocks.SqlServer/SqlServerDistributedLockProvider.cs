@@ -150,21 +150,16 @@ public sealed class SqlServerDistributedLockProvider : DbDistributedLockProvider
 
     protected override async Task<object> HealthCheckServerDataAsync(DbConnection connection, CancellationToken cancellationToken)
     {
-        var serverInfo = await QuerySingleAnonymousAsync(
-            connection,
+        var serverInfo = await connection.QuerySingleAsync<dynamic>(new CommandDefinition(
             "SELECT @@SERVERNAME as servername, CURRENT_TIMESTAMP as time",
-            prototype: new { servername = default(string), time = default(DateTime) },
-            cancellationToken);
+            cancellationToken: cancellationToken)).ConfigureAwait(false);
 
         return new
         {
-            current_timestamp = DateTime.SpecifyKind(serverInfo.time, DateTimeKind.Unspecified).ToString("O"),
+            current_timestamp = DateTime.SpecifyKind((DateTime)serverInfo.time, DateTimeKind.Unspecified).ToString("O"),
             serverInfo.servername,
         };
     }
-
-    private async Task<T> QuerySingleAnonymousAsync<T>(IDbConnection connection, string sql, T prototype, CancellationToken cancellationToken)
-        => await connection.QuerySingleAsync<T>(new CommandDefinition(sql, cancellationToken: cancellationToken)).ConfigureAwait(false);
 
     private async Task<bool> SpGetAppLock(string providerResource, int timeoutMs, DbConnection connection, DbTransaction transaction, LockEventLogger? eventLogger, CancellationToken cancellationToken)
     {

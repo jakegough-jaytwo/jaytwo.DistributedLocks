@@ -105,15 +105,13 @@ public sealed class PostgresDistributedLockProvider : DbDistributedLockProvider<
 
     protected override async Task<object> HealthCheckServerDataAsync(NpgsqlConnection connection, CancellationToken cancellationToken)
     {
-        var serverInfo = await QuerySingleAnonymousAsync(
-            connection,
+        var serverInfo = await connection.QuerySingleAsync<dynamic>(new CommandDefinition(
             "SELECT CURRENT_TIMESTAMP as time, cast(inet_server_addr() as VARCHAR) AS inet_server_addr, inet_server_port() AS inet_server_port",
-            prototype: new { time = default(DateTime), inet_server_addr = default(string), inet_server_port = default(int) },
-            cancellationToken);
+            cancellationToken: cancellationToken)).ConfigureAwait(false);
 
         return new
         {
-            current_timestamp = DateTime.SpecifyKind(serverInfo.time, DateTimeKind.Unspecified).ToString("O"),
+            current_timestamp = DateTime.SpecifyKind((DateTime)serverInfo.time, DateTimeKind.Unspecified).ToString("O"),
             serverInfo.inet_server_addr,
             serverInfo.inet_server_port,
         };
@@ -257,7 +255,4 @@ public sealed class PostgresDistributedLockProvider : DbDistributedLockProvider<
 
         return NullLock.Instance;
     }
-
-    private async Task<T> QuerySingleAnonymousAsync<T>(IDbConnection connection, string sql, T prototype, CancellationToken cancellationToken)
-        => await connection.QuerySingleAsync<T>(new CommandDefinition(sql, cancellationToken: cancellationToken)).ConfigureAwait(false);
 }

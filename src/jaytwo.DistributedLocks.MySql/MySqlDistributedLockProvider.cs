@@ -134,15 +134,13 @@ public sealed class MySqlDistributedLockProvider : DbDistributedLockProvider<DbC
 
     protected override async Task<object> HealthCheckServerDataAsync(DbConnection connection, CancellationToken cancellationToken)
     {
-        var serverInfo = await QuerySingleAnonymousAsync(
-            connection,
+        var serverInfo = await connection.QuerySingleAsync<dynamic>(new CommandDefinition(
             "SELECT current_timestamp as time, @@hostname as hostname, @@port as port",
-            prototype: new { time = default(DateTime), hostname = default(string), port = default(ulong) },
-            cancellationToken);
+            cancellationToken: cancellationToken)).ConfigureAwait(false);
 
         return new
         {
-            current_timestamp = DateTime.SpecifyKind(serverInfo.time, DateTimeKind.Unspecified).ToString("O"),
+            current_timestamp = DateTime.SpecifyKind((DateTime)serverInfo.time, DateTimeKind.Unspecified).ToString("O"),
             serverInfo.hostname,
             serverInfo.port,
         };
@@ -202,7 +200,4 @@ public sealed class MySqlDistributedLockProvider : DbDistributedLockProvider<DbC
             return false;
         }
     }
-
-    private async Task<T> QuerySingleAnonymousAsync<T>(IDbConnection connection, string sql, T prototype, CancellationToken cancellationToken)
-        => await connection.QuerySingleAsync<T>(new CommandDefinition(sql, cancellationToken: cancellationToken)).ConfigureAwait(false);
 }
