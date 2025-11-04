@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using jaytwo.DistributedLocks.Logging;
-using Microsoft.Data.SqlClient;
 
 namespace jaytwo.DistributedLocks.SqlServer;
 

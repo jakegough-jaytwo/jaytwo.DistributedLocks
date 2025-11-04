@@ -3,14 +3,19 @@ using System.Collections.Generic;
 using System.Data.Common;
 using System.Threading;
 using System.Threading.Tasks;
+using jaytwo.DistributedLocks.Db;
 using Microsoft.Extensions.Logging;
 
 namespace jaytwo.DistributedLocks;
 
-public abstract class DbDistributedLockProvider<TConnection> : DistributedLockProvider, IDistributedLockProvider
-    where TConnection : DbConnection
+public abstract class DbDistributedLockProvider : DistributedLockProvider, IDistributedLockProvider
 {
-    protected DbDistributedLockProvider(string providerName, Func<TConnection> connectionFactory, string lockNamespace, int defaultLockWaitSeconds, ILogger? logger)
+    protected DbDistributedLockProvider(string providerName, Func<DbConnection> connectionFactory, string lockNamespace, int defaultLockWaitSeconds, ILogger? logger)
+        : this(providerName, new DbConnectionFactory(connectionFactory), lockNamespace, defaultLockWaitSeconds, logger)
+    {
+    }
+
+    protected DbDistributedLockProvider(string providerName, IDbConnectionFactory connectionFactory, string lockNamespace, int defaultLockWaitSeconds, ILogger? logger)
         : base(providerName, lockNamespace, defaultLockWaitSeconds, logger)
     {
         if (connectionFactory == null)
@@ -21,19 +26,19 @@ public abstract class DbDistributedLockProvider<TConnection> : DistributedLockPr
         ConnectionFactory = connectionFactory;
     }
 
-    protected Func<TConnection> ConnectionFactory { get; }
+    protected IDbConnectionFactory ConnectionFactory { get; }
 
     public override async Task<IReadOnlyDictionary<string, object>> HealthCheckAsync(CancellationToken cancellationToken = default)
     {
         var result = new Dictionary<string, object>(await base.HealthCheckAsync(cancellationToken));
 
-        await using var connection = ConnectionFactory.Invoke();
+        await using var connection = await ConnectionFactory.OpenConnectionAsync();
 
         result["connection"] = HealthCheckConnectionStringDetails(connection.ConnectionString);
 
         try
         {
-            result["from_server"] = await HealthCheckServerDataAsync(connection, cancellationToken);
+            result["from_server"] = await HealthCheckServerDataAsync(connection, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -50,5 +55,5 @@ public abstract class DbDistributedLockProvider<TConnection> : DistributedLockPr
 
     protected abstract object HealthCheckConnectionStringDetails(string connectionString);
 
-    protected abstract Task<object> HealthCheckServerDataAsync(TConnection connection, CancellationToken cancellationToken);
+    protected abstract Task<object> HealthCheckServerDataAsync(DbConnection connection, CancellationToken cancellationToken);
 }

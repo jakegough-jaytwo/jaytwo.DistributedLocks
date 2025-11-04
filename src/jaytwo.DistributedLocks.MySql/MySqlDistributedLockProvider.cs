@@ -4,25 +4,30 @@ using System.Data.Common;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
-using Dapper;
+using jaytwo.DistributedLocks.Db;
 using jaytwo.DistributedLocks.Logging;
 using Microsoft.Extensions.Logging;
 
 namespace jaytwo.DistributedLocks.MySql;
 
-public sealed class MySqlDistributedLockProvider : DbDistributedLockProvider<DbConnection>, IDistributedLockProvider
+public sealed class MySqlDistributedLockProvider : DbDistributedLockProvider, IDistributedLockProvider
 {
     internal const string MySqlProviderName = "MySql";
     internal const int DefaultLockWaitSecondsFallback = 30;
 
 #if NET8_0_OR_GREATER
     public MySqlDistributedLockProvider(DbDataSource dataSource, string lockNamespace, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
-        : base(MySqlProviderName, dataSource.CreateConnection, lockNamespace, defaultLockWaitSeconds, logger)
+        : base(MySqlProviderName, new DbDataSourcePassthrough(dataSource), lockNamespace, defaultLockWaitSeconds, logger)
     {
     }
 #endif
 
     public MySqlDistributedLockProvider(Func<DbConnection> connectionFactory, string lockNamespace, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
+        : base(MySqlProviderName, new DbConnectionFactory(connectionFactory), lockNamespace, defaultLockWaitSeconds, logger)
+    {
+    }
+
+    public MySqlDistributedLockProvider(IDbConnectionFactory connectionFactory, string lockNamespace, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
         : base(MySqlProviderName, connectionFactory, lockNamespace, defaultLockWaitSeconds, logger)
     {
     }
@@ -33,6 +38,9 @@ public sealed class MySqlDistributedLockProvider : DbDistributedLockProvider<DbC
 #endif
 
     public static MySqlDistributedLockProvider CreateWithDefaultLockNamespace(Func<DbConnection> connectionFactory, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
+        => new(connectionFactory, DefaultLockNamespace(logger, MySqlProviderName), logger, defaultLockWaitSeconds);
+
+    public static MySqlDistributedLockProvider CreateWithDefaultLockNamespace(IDbConnectionFactory connectionFactory, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
         => new(connectionFactory, DefaultLockNamespace(logger, MySqlProviderName), logger, defaultLockWaitSeconds);
 
     public override async Task<IDistributedLock> CreateLockAsync(string resource, int? waitSeconds = default, CancellationToken cancellationToken = default)
@@ -70,11 +78,9 @@ public sealed class MySqlDistributedLockProvider : DbDistributedLockProvider<DbC
     internal async Task<IDistributedLock> CreateLockAsync(string name, int effectiveWaitSeconds, LockEventLogger? eventLogger, CancellationToken cancellationToken)
     {
         bool acquired = false;
-        var connection = ConnectionFactory.Invoke();
+        var connection = await ConnectionFactory.OpenConnectionAsync(cancellationToken);
         try
         {
-            await connection.OpenAsync(cancellationToken).ConfigureAwait(false); // Dapper automatically closes connections that it automatically opened
-
             acquired = await GetLockAsync(connection, name, effectiveWaitSeconds, eventLogger, cancellationToken).ConfigureAwait(false);
 
             if (acquired)
@@ -134,38 +140,41 @@ public sealed class MySqlDistributedLockProvider : DbDistributedLockProvider<DbC
 
     protected override async Task<object> HealthCheckServerDataAsync(DbConnection connection, CancellationToken cancellationToken)
     {
-        var serverInfo = await connection.QuerySingleAsync<dynamic>(new CommandDefinition(
-            "SELECT current_timestamp as time, @@hostname as hostname, @@port as port",
-            cancellationToken: cancellationToken)).ConfigureAwait(false);
+        await using var command = connection.CreateCommand()
+            .WithCommandText("SELECT current_timestamp as time, @@hostname as hostname, @@port as port");
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            throw new Exception("Health check query returned no rows.");
+        }
 
         return new
         {
-            current_timestamp = DateTime.SpecifyKind((DateTime)serverInfo.time, DateTimeKind.Unspecified).ToString("O"),
-            serverInfo.hostname,
-            serverInfo.port,
+            current_timestamp = DateTime.SpecifyKind(reader.GetFieldValue<DateTime>("time"), DateTimeKind.Unspecified).ToString("O"),
+            hostname = reader["hostname"],
+            port = reader["port"],
         };
     }
 
     private async Task<bool> GetLockAsync(DbConnection connection, string name, int timeoutSeconds, LockEventLogger? eventLogger, CancellationToken cancellationToken)
     {
         using var loggerScope = eventLogger?.Scope(x => x.WithFields(("sql_command", "GET_LOCK")));
-        const string query = "SELECT GET_LOCK(@name, @timeout)";
 
-        var args = new
-        {
-            name = name,
-            timeout = timeoutSeconds,
-        };
-
-        // Ensure SQL command timeout won't undercut the lock timeout
-        int commandTimeoutSeconds = timeoutSeconds + 2;
-
-        int? returnValue = null;
+        long? returnValue = null;
         string? result = null;
         var stopwatch = Stopwatch.StartNew();
         try
         {
-            returnValue = await connection.ExecuteScalarAsync<int?>(new CommandDefinition(query, args, commandTimeout: commandTimeoutSeconds, cancellationToken: cancellationToken)).ConfigureAwait(false);
+            await using var command = connection.CreateCommand()
+                .WithCommandText("SELECT GET_LOCK(@name, @timeout)")
+                .WithParameter("name", name)
+                .WithParameter("timeout", timeoutSeconds)
+                .WithCommandTimeout(timeoutSeconds + 2); // Ensure SQL command timeout won't undercut the lock timeout
+
+            returnValue = (long?)(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false));
+
             stopwatch.Stop();
 
             result = returnValue switch

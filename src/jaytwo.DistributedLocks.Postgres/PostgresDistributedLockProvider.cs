@@ -1,16 +1,17 @@
 using System;
 using System.Data;
+using System.Data.Common;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
-using Dapper;
+using jaytwo.DistributedLocks.Db;
 using jaytwo.DistributedLocks.Logging;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 
 namespace jaytwo.DistributedLocks.Postgres;
 
-public sealed class PostgresDistributedLockProvider : DbDistributedLockProvider<NpgsqlConnection>, IDistributedLockProvider
+public sealed class PostgresDistributedLockProvider : DbDistributedLockProvider, IDistributedLockProvider
 {
     internal const string PostgresProviderName = "Postgres";
     internal const int DefaultLockWaitSecondsFallback = 30;
@@ -20,12 +21,19 @@ public sealed class PostgresDistributedLockProvider : DbDistributedLockProvider<
     {
     }
 
-    public PostgresDistributedLockProvider(NpgsqlDataSource dataSource, string lockNamespace, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
-        : base(PostgresProviderName, dataSource.CreateConnection, lockNamespace, defaultLockWaitSeconds, logger)
+#if NET8_0_OR_GREATER
+    public PostgresDistributedLockProvider(DbDataSource dataSource, string lockNamespace, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
+        : base(PostgresProviderName, new DbDataSourcePassthrough(dataSource), lockNamespace, defaultLockWaitSeconds, logger)
+    {
+    }
+#endif
+
+    public PostgresDistributedLockProvider(Func<DbConnection> connectionFactory, string lockNamespace, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
+        : base(PostgresProviderName, connectionFactory, lockNamespace, defaultLockWaitSeconds, logger)
     {
     }
 
-    public PostgresDistributedLockProvider(Func<NpgsqlConnection> connectionFactory, string lockNamespace, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
+    public PostgresDistributedLockProvider(IDbConnectionFactory connectionFactory, string lockNamespace, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
         : base(PostgresProviderName, connectionFactory, lockNamespace, defaultLockWaitSeconds, logger)
     {
     }
@@ -33,10 +41,15 @@ public sealed class PostgresDistributedLockProvider : DbDistributedLockProvider<
     public static PostgresDistributedLockProvider CreateWithDefaultLockNamespace(string connectionString, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
         => new(connectionString, DefaultLockNamespace(logger, PostgresProviderName), logger, defaultLockWaitSeconds);
 
-    public static PostgresDistributedLockProvider CreateWithDefaultLockNamespace(NpgsqlDataSource dataSource, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
+#if NET8_0_OR_GREATER
+    public static PostgresDistributedLockProvider CreateWithDefaultLockNamespace(DbDataSource dataSource, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
         => new(dataSource, DefaultLockNamespace(logger, PostgresProviderName), logger, defaultLockWaitSeconds);
+#endif
 
-    public static PostgresDistributedLockProvider CreateWithDefaultLockNamespace(Func<NpgsqlConnection> connectionFactory, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
+    public static PostgresDistributedLockProvider CreateWithDefaultLockNamespace(Func<DbConnection> connectionFactory, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
+        => new(connectionFactory, DefaultLockNamespace(logger, PostgresProviderName), logger, defaultLockWaitSeconds);
+
+    public static PostgresDistributedLockProvider CreateWithDefaultLockNamespace(IDbConnectionFactory connectionFactory, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
         => new(connectionFactory, DefaultLockNamespace(logger, PostgresProviderName), logger, defaultLockWaitSeconds);
 
     public override async Task<IDistributedLock> CreateLockAsync(string resource, int? waitSeconds = default, CancellationToken cancellationToken = default)
@@ -76,7 +89,7 @@ public sealed class PostgresDistributedLockProvider : DbDistributedLockProvider<
 
     internal async Task<IDistributedLock> CreateLockAsync(long lockKey, int effectiveTimeoutMs, LockEventLogger? eventLogger, CancellationToken cancellationToken)
     {
-        Func<NpgsqlConnection, NpgsqlTransaction, CancellationToken, Task<bool>> advisoryLockDelegate;
+        Func<DbConnection, DbTransaction, CancellationToken, Task<bool>> advisoryLockDelegate;
 
         if (effectiveTimeoutMs == 0)
         {
@@ -103,31 +116,41 @@ public sealed class PostgresDistributedLockProvider : DbDistributedLockProvider<
         };
     }
 
-    protected override async Task<object> HealthCheckServerDataAsync(NpgsqlConnection connection, CancellationToken cancellationToken)
+    protected override async Task<object> HealthCheckServerDataAsync(DbConnection connection, CancellationToken cancellationToken)
     {
-        var serverInfo = await connection.QuerySingleAsync<dynamic>(new CommandDefinition(
-            "SELECT CURRENT_TIMESTAMP as time, cast(inet_server_addr() as VARCHAR) AS inet_server_addr, inet_server_port() AS inet_server_port",
-            cancellationToken: cancellationToken)).ConfigureAwait(false);
+        await using var command = connection.CreateCommand()
+            .WithCommandText("SELECT current_timestamp as current_timestamp, localtimestamp as localtimestamp, cast(inet_server_addr() as VARCHAR) AS inet_server_addr, inet_server_port() AS inet_server_port");
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            throw new Exception("Health check query returned no rows.");
+        }
 
         return new
         {
-            current_timestamp = DateTime.SpecifyKind((DateTime)serverInfo.time, DateTimeKind.Unspecified).ToString("O"),
-            serverInfo.inet_server_addr,
-            serverInfo.inet_server_port,
+            current_timestamp = DateTime.SpecifyKind(reader.GetFieldValue<DateTime>("current_timestamp"), DateTimeKind.Unspecified).ToString("O"),
+            localtimestamp = DateTime.SpecifyKind(reader.GetFieldValue<DateTime>("localtimestamp"), DateTimeKind.Unspecified).ToString("O"),
+            inet_server_addr = reader["inet_server_addr"],
+            inet_server_port = reader["inet_server_port"],
         };
     }
 
-    private async Task<bool> PgTryAdvisoryLock(long key, NpgsqlConnection connection, NpgsqlTransaction transaction, LockEventLogger? eventLogger, CancellationToken cancellationToken)
+    private async Task<bool> PgTryAdvisoryLock(long key, DbConnection connection, DbTransaction transaction, LockEventLogger? eventLogger, CancellationToken cancellationToken)
     {
         using var loggerScope = eventLogger?.Scope(x => x.WithFields(("sql_command", "pg_try_advisory_xact_lock")));
-        const string query = "SELECT pg_try_advisory_xact_lock(@key)";
-        var args = new { key, };
+
+        await using var command = connection.CreateCommand()
+            .WithTransaction(transaction)
+            .WithCommandText("SELECT pg_try_advisory_xact_lock(@key)")
+            .WithParameter("key", key, DbType.Int64);
 
         var returnValue = false;
         var stopwatch = Stopwatch.StartNew();
         try
         {
-            returnValue = await connection.ExecuteScalarAsync<bool>(new CommandDefinition(query, args, transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
+            returnValue = (bool)(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
             stopwatch.Stop();
         }
         catch (OperationCanceledException ex)
@@ -156,7 +179,7 @@ public sealed class PostgresDistributedLockProvider : DbDistributedLockProvider<
         return returnValue;
     }
 
-    private async Task<bool> PgAdvisoryLock(long key, int statementTimeoutMs, NpgsqlConnection connection, NpgsqlTransaction transaction, LockEventLogger? eventLogger, CancellationToken cancellationToken)
+    private async Task<bool> PgAdvisoryLock(long key, int statementTimeoutMs, DbConnection connection, DbTransaction transaction, LockEventLogger? eventLogger, CancellationToken cancellationToken)
     {
         if (statementTimeoutMs < 0)
         {
@@ -165,27 +188,23 @@ public sealed class PostgresDistributedLockProvider : DbDistributedLockProvider<
 
         using var loggerScope = eventLogger?.Scope(x => x.WithFields(("sql_command", "pg_advisory_xact_lock")));
 
-        const string query = """
-            WITH _s AS (
-              SELECT set_config('statement_timeout', @statementTimeoutMs::text, true)
-            )
-            SELECT pg_advisory_xact_lock(@key);
-            """;
-
-        var args = new
-        {
-            key,
-            statementTimeoutMs,
-        };
-
-        // Ensure SQL command timeout won't undercut the statement timeout
-        int commandTimeoutSeconds = SecondsCeilingFromMilliseconds(statementTimeoutMs) + 2;
+        await using var command = connection.CreateCommand()
+            .WithTransaction(transaction)
+            .WithCommandText("""
+                WITH _s AS (
+                  SELECT set_config('statement_timeout', @statement_timeout_ms::text, true)
+                )
+                SELECT pg_advisory_xact_lock(@key);
+            """)
+            .WithParameter("key", key, DbType.Int64)
+            .WithParameter("statement_timeout_ms", statementTimeoutMs)
+            .WithCommandTimeout(SecondsCeilingFromMilliseconds(statementTimeoutMs) + 2); // Ensure SQL command timeout won't undercut the statement timeout
 
         var stopwatch = Stopwatch.StartNew();
         bool acquired;
         try
         {
-            await connection.ExecuteAsync(new CommandDefinition(query, args, transaction, commandTimeout: commandTimeoutSeconds, cancellationToken: cancellationToken)).ConfigureAwait(false);
+            await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
             stopwatch.Stop();
             acquired = true;
             eventLogger?.LogAcquired(stopwatch.Elapsed, x => x.AppendToMessage(("waited", true), ("result", "completed"), ("return_value", "(void))")));
@@ -220,18 +239,17 @@ public sealed class PostgresDistributedLockProvider : DbDistributedLockProvider<
     }
 
     private async Task<IDistributedLock> GetAdvisoryLock(
-        Func<NpgsqlConnection, NpgsqlTransaction, CancellationToken, Task<bool>> advisoryLockDelegate,
+        Func<DbConnection, DbTransaction, CancellationToken, Task<bool>> advisoryLockDelegate,
         long key,
         LockEventLogger? eventLogger,
         CancellationToken cancellationToken)
     {
         bool acquired = false;
-        var connection = ConnectionFactory.Invoke();
-        NpgsqlTransaction? transaction = null;
+        var connection = await ConnectionFactory.OpenConnectionAsync(cancellationToken);
+        DbTransaction? transaction = null;
 
         try
         {
-            await connection.OpenAsync(cancellationToken).ConfigureAwait(false); // Dapper automatically closes connections that it automatically opened
             transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
             acquired = await advisoryLockDelegate(connection, transaction, cancellationToken);
 

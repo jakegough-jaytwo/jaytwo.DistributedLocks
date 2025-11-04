@@ -1,16 +1,16 @@
 using System;
+using System.Data.Common;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using jaytwo.DistributedLocks.Logging;
-using Npgsql;
 
 namespace jaytwo.DistributedLocks.Postgres;
 
 public sealed class PostgresDistributedLock : DistributedLock<PostgresDistributedLockProvider, long>, IDistributedLock, IDisposable, IAsyncDisposable
 {
-    private readonly NpgsqlConnection _connection;
-    private readonly NpgsqlTransaction _transaction;
+    private readonly DbConnection _connection;
+    private readonly DbTransaction _transaction;
 
     private readonly Stopwatch _lockHeldTimer;
 
@@ -19,8 +19,8 @@ public sealed class PostgresDistributedLock : DistributedLock<PostgresDistribute
 
     public PostgresDistributedLock(
         PostgresDistributedLockProvider provider,
-        NpgsqlConnection connection,
-        NpgsqlTransaction transaction,
+        DbConnection connection,
+        DbTransaction transaction,
         long key,
         LockEventLogger? eventLogger)
         : base(provider, key, eventLogger)

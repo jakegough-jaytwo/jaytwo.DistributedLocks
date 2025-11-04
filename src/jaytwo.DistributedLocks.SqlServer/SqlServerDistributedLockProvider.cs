@@ -4,23 +4,21 @@ using System.Data.Common;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
-using Dapper;
+using jaytwo.DistributedLocks.Db;
 using jaytwo.DistributedLocks.Logging;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 
 namespace jaytwo.DistributedLocks.SqlServer;
 
-public sealed class SqlServerDistributedLockProvider : DbDistributedLockProvider<DbConnection>, IDistributedLockProvider
+public sealed class SqlServerDistributedLockProvider : DbDistributedLockProvider, IDistributedLockProvider
 {
     internal const string SqlServerProviderName = "SqlServer";
     internal const int DefaultLockWaitSecondsFallback = 30;
 
     public SqlServerDistributedLockProvider(string connectionString, string lockNamespace, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
         : this(
-            () => new SqlConnection(string.IsNullOrWhiteSpace(connectionString)
-                ? throw new ArgumentException("Connection string is required.", nameof(connectionString))
-                : connectionString),
+            new DbConnectionFactory(() => new SqlConnection(connectionString)),
             lockNamespace,
             logger,
             defaultLockWaitSeconds)
@@ -29,12 +27,17 @@ public sealed class SqlServerDistributedLockProvider : DbDistributedLockProvider
 
 #if NET8_0_OR_GREATER
     public SqlServerDistributedLockProvider(DbDataSource dataSource, string lockNamespace, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
-        : base(SqlServerProviderName, dataSource.CreateConnection, lockNamespace, defaultLockWaitSeconds, logger)
+        : base(SqlServerProviderName, new DbDataSourcePassthrough(dataSource), lockNamespace, defaultLockWaitSeconds, logger)
     {
     }
 #endif
 
     public SqlServerDistributedLockProvider(Func<DbConnection> connectionFactory, string lockNamespace, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
+        : base(SqlServerProviderName, connectionFactory, lockNamespace, defaultLockWaitSeconds, logger)
+    {
+    }
+
+    public SqlServerDistributedLockProvider(IDbConnectionFactory connectionFactory, string lockNamespace, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
         : base(SqlServerProviderName, connectionFactory, lockNamespace, defaultLockWaitSeconds, logger)
     {
     }
@@ -48,6 +51,9 @@ public sealed class SqlServerDistributedLockProvider : DbDistributedLockProvider
 #endif
 
     public static SqlServerDistributedLockProvider CreateWithDefaultLockNamespace(Func<DbConnection> connectionFactory, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
+        => new(connectionFactory, DefaultLockNamespace(logger, SqlServerProviderName), logger, defaultLockWaitSeconds);
+
+    public static SqlServerDistributedLockProvider CreateWithDefaultLockNamespace(IDbConnectionFactory connectionFactory, ILogger? logger = default, int defaultLockWaitSeconds = DefaultLockWaitSecondsFallback)
         => new(connectionFactory, DefaultLockNamespace(logger, SqlServerProviderName), logger, defaultLockWaitSeconds);
 
     public override async Task<IDistributedLock> CreateLockAsync(string resource, int? waitSeconds = default, CancellationToken cancellationToken = default)
@@ -106,13 +112,12 @@ public sealed class SqlServerDistributedLockProvider : DbDistributedLockProvider
     internal async Task<IDistributedLock> CreateLockAsync(string qualifiedResourceHash, int effectiveTimeoutMs, LockEventLogger? eventLogger, CancellationToken cancellationToken)
     {
         bool acquired = false;
-        var connection = ConnectionFactory.Invoke();
-        SqlTransaction? transaction = null;
+        var connection = await ConnectionFactory.OpenConnectionAsync(cancellationToken);
+        DbTransaction? transaction = null;
 
         try
         {
-            await connection.OpenAsync(cancellationToken).ConfigureAwait(false); // Dapper automatically closes connections that it automatically opened
-            transaction = (SqlTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
             acquired = await SpGetAppLock(qualifiedResourceHash, effectiveTimeoutMs, connection, transaction, eventLogger, cancellationToken).ConfigureAwait(false);
 
             if (acquired)
@@ -150,14 +155,20 @@ public sealed class SqlServerDistributedLockProvider : DbDistributedLockProvider
 
     protected override async Task<object> HealthCheckServerDataAsync(DbConnection connection, CancellationToken cancellationToken)
     {
-        var serverInfo = await connection.QuerySingleAsync<dynamic>(new CommandDefinition(
-            "SELECT @@SERVERNAME as servername, CURRENT_TIMESTAMP as time",
-            cancellationToken: cancellationToken)).ConfigureAwait(false);
+        await using var command = connection.CreateCommand()
+            .WithCommandText("SELECT @@SERVERNAME as servername, CURRENT_TIMESTAMP as time");
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            throw new Exception("Health check query returned no rows.");
+        }
 
         return new
         {
-            current_timestamp = DateTime.SpecifyKind((DateTime)serverInfo.time, DateTimeKind.Unspecified).ToString("O"),
-            serverInfo.servername,
+            current_timestamp = DateTime.SpecifyKind(reader.GetFieldValue<DateTime>("time"), DateTimeKind.Unspecified).ToString("O"),
+            servername = reader["servername"],
         };
     }
 
@@ -178,32 +189,28 @@ public sealed class SqlServerDistributedLockProvider : DbDistributedLockProvider
             timeoutMs = 0;
         }
 
+        const string sqlCommand = "sp_getapplock";
         const string lockMode = "Exclusive";
         const string lockOwner = "Transaction";
 
-        var parameters = new DynamicParameters();
-        parameters.Add("@Resource", providerResource, DbType.String, size: 255);
-        parameters.Add("@LockMode", lockMode, DbType.AnsiString, size: 32);
-        parameters.Add("@LockOwner", lockOwner, DbType.AnsiString, size: 32);
-        parameters.Add("@LockTimeout", timeoutMs, DbType.Int32);
-        parameters.Add("ReturnValue", dbType: DbType.Int32, direction: ParameterDirection.ReturnValue);
+        await using var command = connection.CreateCommand()
+            .WithTransaction(transaction)
+            .WithCommandType(CommandType.StoredProcedure)
+            .WithCommandText("sp_getapplock")
+            .WithParameter("@Resource", providerResource, DbType.String, size: 255)
+            .WithParameter("@LockMode", lockMode, DbType.AnsiString, size: 32)
+            .WithParameter("@LockOwner", lockOwner, DbType.AnsiString, size: 32)
+            .WithParameter("@LockTimeout", timeoutMs, DbType.Int32)
+            .WithParameter("@ReturnValue", dbType: DbType.Int32, direction: ParameterDirection.ReturnValue)
+            .WithCommandTimeout(SecondsCeilingFromMilliseconds(timeoutMs) + 2); // Ensure SQL command timeout won't undercut the lock timeout
 
-        // Ensure SQL command timeout won't undercut the lock wait
-        int commandTimeoutSeconds = SecondsCeilingFromMilliseconds(timeoutMs) + 2;
-
-        using var loggerScope = eventLogger?.Scope(x => x.WithFields(("sql_command", "sp_getapplock")));
+        using var loggerScope = eventLogger?.Scope(x => x.WithFields(("sql_command", sqlCommand)));
 
         var executionSucceeded = false;
         var stopwatch = Stopwatch.StartNew();
         try
         {
-            await connection.ExecuteAsync(new CommandDefinition(
-                "sp_getapplock",
-                parameters,
-                transaction,
-                commandTimeout: commandTimeoutSeconds,
-                commandType: CommandType.StoredProcedure,
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
+            await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
 
             stopwatch.Stop();
             executionSucceeded = true;
@@ -221,7 +228,7 @@ public sealed class SqlServerDistributedLockProvider : DbDistributedLockProvider
             throw;
         }
 
-        var returnValue = executionSucceeded ? parameters.Get<int>("ReturnValue") : default;
+        var returnValue = executionSucceeded ? (int)command.Parameters["@ReturnValue"].Value! : default;
         var appLockResult = AppLockResultFromReturnValue(executionSucceeded, returnValue);
 
         if (appLockResult.Acquired)

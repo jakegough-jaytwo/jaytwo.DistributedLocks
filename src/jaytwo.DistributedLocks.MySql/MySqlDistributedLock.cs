@@ -3,7 +3,7 @@ using System.Data.Common;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
-using Dapper;
+using jaytwo.DistributedLocks.Db;
 using jaytwo.DistributedLocks.Logging;
 
 namespace jaytwo.DistributedLocks.MySql;
@@ -40,10 +40,10 @@ public sealed class MySqlDistributedLock : DistributedLock<MySqlDistributedLockP
         return DoDispose(ReleaseLockAsync);
     }
 
-    private void DoDispose(Func<int?> disposeCallback)
+    private void DoDispose(Func<long?> disposeCallback)
         => DoDispose(() => Task.FromResult(disposeCallback())).AsTask().GetAwaiter().GetResult();
 
-    private async ValueTask DoDispose(Func<Task<int?>> disposeCallback)
+    private async ValueTask DoDispose(Func<Task<long?>> disposeCallback)
     {
         if (Interlocked.Exchange(ref _disposed, 1) == 1)
         {
@@ -54,7 +54,7 @@ public sealed class MySqlDistributedLock : DistributedLock<MySqlDistributedLockP
 
         using var loggerScope = EventLogger?.DefaultScope(x => x.WithFields(("sql_command", "RELEASE_LOCK")));
 
-        int? returnValue = null;
+        long? returnValue = null;
         Exception? error = null;
         var stopwatch = Stopwatch.StartNew();
         try
@@ -83,12 +83,21 @@ public sealed class MySqlDistributedLock : DistributedLock<MySqlDistributedLockP
         }
     }
 
-    private int? ReleaseLock()
-        => _connection.ExecuteScalar<int?>(BuildCommandDefinition());
+    private long? ReleaseLock()
+    {
+        using var command = BuildCommand();
+        return (long?)command.ExecuteScalar();
+    }
 
-    private async Task<int?> ReleaseLockAsync()
-        => await _connection.ExecuteScalarAsync<int?>(BuildCommandDefinition());
+    private async Task<long?> ReleaseLockAsync()
+    {
+        await using var command = BuildCommand();
+        return (long?)(await command.ExecuteScalarAsync());
+    }
 
-    private CommandDefinition BuildCommandDefinition()
-        => new CommandDefinition("SELECT RELEASE_LOCK(@name)", new { name = ProviderResource }, commandTimeout: 5);
+    private DbCommand BuildCommand()
+        => _connection.CreateCommand()
+            .WithCommandText("SELECT RELEASE_LOCK(@name)")
+            .WithParameter("name", ProviderResource)
+            .WithCommandTimeout(5);
 }
