@@ -13,10 +13,7 @@ public static class DbParameterExtensions
     }
 
     public static DbParameter WithDBNullValue(this DbParameter parameter)
-    {
-        parameter.Value = DBNull.Value;
-        return parameter;
-    }
+        => parameter.WithValue(DBNull.Value);
 
     public static DbParameter WithDbType(this DbParameter parameter, DbType dbType)
     {

@@ -155,10 +155,9 @@ public sealed class SqlServerDistributedLockProvider : DbDistributedLockProvider
 
     protected override async Task<object> HealthCheckServerDataAsync(DbConnection connection, CancellationToken cancellationToken)
     {
-        await using var command = connection.CreateCommand()
-            .WithCommandText("SELECT @@SERVERNAME as servername, CURRENT_TIMESTAMP as time");
-
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        await using var reader = await connection.ExecuteReaderAsync(
+            command => command.WithCommandText("SELECT @@SERVERNAME as servername, CURRENT_TIMESTAMP as time"),
+            cancellationToken).ConfigureAwait(false);
 
         if (!await reader.ReadAsync(cancellationToken))
         {

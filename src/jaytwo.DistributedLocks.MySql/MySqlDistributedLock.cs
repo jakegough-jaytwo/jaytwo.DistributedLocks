@@ -84,19 +84,13 @@ public sealed class MySqlDistributedLock : DistributedLock<MySqlDistributedLockP
     }
 
     private long? ReleaseLock()
-    {
-        using var command = BuildCommand();
-        return (long?)command.ExecuteScalar();
-    }
+        => _connection.ExecuteScalar<long>(BuildReleaseLockCommand);
 
     private async Task<long?> ReleaseLockAsync()
-    {
-        await using var command = BuildCommand();
-        return (long?)(await command.ExecuteScalarAsync());
-    }
+        => await _connection.ExecuteScalarAsync<long>(BuildReleaseLockCommand);
 
-    private DbCommand BuildCommand()
-        => _connection.CreateCommand()
+    private void BuildReleaseLockCommand(DbCommand command)
+        => command
             .WithCommandText("SELECT RELEASE_LOCK(@name)")
             .WithParameter("name", ProviderResource)
             .WithCommandTimeout(5);

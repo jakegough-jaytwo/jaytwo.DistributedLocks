@@ -32,7 +32,7 @@ public class DbConnectionFactory : IDbConnectionFactory
         }
         catch
         {
-            connection?.Dispose();
+            connection.Dispose();
             throw;
         }
     }
@@ -47,7 +47,7 @@ public class DbConnectionFactory : IDbConnectionFactory
         }
         catch
         {
-            connection?.Dispose();
+            await connection.DisposeAsync();
             throw;
         }
     }

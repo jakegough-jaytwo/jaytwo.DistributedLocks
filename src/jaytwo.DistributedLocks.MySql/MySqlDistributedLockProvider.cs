@@ -140,10 +140,9 @@ public sealed class MySqlDistributedLockProvider : DbDistributedLockProvider, ID
 
     protected override async Task<object> HealthCheckServerDataAsync(DbConnection connection, CancellationToken cancellationToken)
     {
-        await using var command = connection.CreateCommand()
-            .WithCommandText("SELECT current_timestamp as time, @@hostname as hostname, @@port as port");
-
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        await using var reader = await connection.ExecuteReaderAsync(
+            command => command.WithCommandText("SELECT current_timestamp as time, @@hostname as hostname, @@port as port"),
+            cancellationToken).ConfigureAwait(false);
 
         if (!await reader.ReadAsync(cancellationToken))
         {
@@ -167,13 +166,13 @@ public sealed class MySqlDistributedLockProvider : DbDistributedLockProvider, ID
         var stopwatch = Stopwatch.StartNew();
         try
         {
-            await using var command = connection.CreateCommand()
-                .WithCommandText("SELECT GET_LOCK(@name, @timeout)")
-                .WithParameter("name", name)
-                .WithParameter("timeout", timeoutSeconds)
-                .WithCommandTimeout(timeoutSeconds + 2); // Ensure SQL command timeout won't undercut the lock timeout
-
-            returnValue = (long?)(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false));
+            returnValue = await connection.ExecuteScalarAsync<long>(
+                command => command
+                    .WithCommandText("SELECT GET_LOCK(@name, @timeout)")
+                    .WithParameter("name", name)
+                    .WithParameter("timeout", timeoutSeconds)
+                    .WithCommandTimeout(timeoutSeconds + 2), // Ensure SQL command timeout won't undercut the lock timeout
+                cancellationToken);
 
             stopwatch.Stop();
 

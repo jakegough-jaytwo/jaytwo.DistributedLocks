@@ -1,6 +1,8 @@
 using System;
 using System.Data;
 using System.Data.Common;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace jaytwo.DistributedLocks.Db;
 
@@ -82,4 +84,10 @@ public static class DbCommandExtensions
                 p.Value = value;
             }
         });
+
+    public static T? ExecuteScalar<T>(this DbCommand command)
+        => (T?)command.ExecuteScalar();
+
+    public static async Task<T?> ExecuteScalarAsync<T>(this DbCommand command, CancellationToken cancellationToken = default)
+        => (T?)(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false));
 }

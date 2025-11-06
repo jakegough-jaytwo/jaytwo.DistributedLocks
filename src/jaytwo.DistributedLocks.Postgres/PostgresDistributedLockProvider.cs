@@ -118,10 +118,9 @@ public sealed class PostgresDistributedLockProvider : DbDistributedLockProvider,
 
     protected override async Task<object> HealthCheckServerDataAsync(DbConnection connection, CancellationToken cancellationToken)
     {
-        await using var command = connection.CreateCommand()
-            .WithCommandText("SELECT current_timestamp as current_timestamp, localtimestamp as localtimestamp, cast(inet_server_addr() as VARCHAR) AS inet_server_addr, inet_server_port() AS inet_server_port");
-
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        await using var reader = await connection.ExecuteReaderAsync(
+            command => command.WithCommandText("SELECT current_timestamp as current_timestamp, localtimestamp as localtimestamp, cast(inet_server_addr() as VARCHAR) AS inet_server_addr, inet_server_port() AS inet_server_port"),
+            cancellationToken).ConfigureAwait(false);
 
         if (!await reader.ReadAsync(cancellationToken))
         {
@@ -141,16 +140,17 @@ public sealed class PostgresDistributedLockProvider : DbDistributedLockProvider,
     {
         using var loggerScope = eventLogger?.Scope(x => x.WithFields(("sql_command", "pg_try_advisory_xact_lock")));
 
-        await using var command = connection.CreateCommand()
-            .WithTransaction(transaction)
-            .WithCommandText("SELECT pg_try_advisory_xact_lock(@key)")
-            .WithParameter("key", key, DbType.Int64);
-
         var returnValue = false;
         var stopwatch = Stopwatch.StartNew();
         try
         {
-            returnValue = (bool)(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
+            returnValue = await connection.ExecuteScalarAsync<bool>(
+                command => command
+                    .WithTransaction(transaction)
+                    .WithCommandText("SELECT pg_try_advisory_xact_lock(@key)")
+                    .WithParameter("key", key, DbType.Int64),
+                cancellationToken);
+
             stopwatch.Stop();
         }
         catch (OperationCanceledException ex)
