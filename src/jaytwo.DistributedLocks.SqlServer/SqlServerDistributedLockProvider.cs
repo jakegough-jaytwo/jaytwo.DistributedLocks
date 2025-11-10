@@ -154,22 +154,14 @@ public sealed class SqlServerDistributedLockProvider : DbDistributedLockProvider
     }
 
     protected override async Task<object> HealthCheckServerDataAsync(DbConnection connection, CancellationToken cancellationToken)
-    {
-        await using var reader = await connection.ExecuteReaderAsync(
-            command => command.WithCommandText("SELECT @@SERVERNAME as servername, CURRENT_TIMESTAMP as time"),
+        => await connection.QuerySingleAsync(
+            c => c.WithCommandText("SELECT @@SERVERNAME as servername, CURRENT_TIMESTAMP as time"),
+            r => new
+            {
+                current_timestamp = DateTime.SpecifyKind(r.GetDateTime("time"), DateTimeKind.Unspecified).ToString("O"),
+                servername = r["servername"],
+            },
             cancellationToken).ConfigureAwait(false);
-
-        if (!await reader.ReadAsync(cancellationToken))
-        {
-            throw new Exception("Health check query returned no rows.");
-        }
-
-        return new
-        {
-            current_timestamp = DateTime.SpecifyKind(reader.GetFieldValue<DateTime>("time"), DateTimeKind.Unspecified).ToString("O"),
-            servername = reader["servername"],
-        };
-    }
 
     private async Task<bool> SpGetAppLock(string providerResource, int timeoutMs, DbConnection connection, DbTransaction transaction, LockEventLogger? eventLogger, CancellationToken cancellationToken)
     {

@@ -86,8 +86,18 @@ public static class DbCommandExtensions
         });
 
     public static T? ExecuteScalar<T>(this DbCommand command)
-        => (T?)command.ExecuteScalar();
+        => ChangeType<T>(command.ExecuteScalar());
 
     public static async Task<T?> ExecuteScalarAsync<T>(this DbCommand command, CancellationToken cancellationToken = default)
-        => (T?)(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false));
+        => ChangeType<T>(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false));
+
+    private static T? ChangeType<T>(object? value)
+    {
+        if (value is null || value is DBNull)
+        {
+            return default;
+        }
+
+        return (T)Convert.ChangeType(value, typeof(T), provider: null);
+    }
 }

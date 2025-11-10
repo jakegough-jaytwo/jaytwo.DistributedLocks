@@ -139,23 +139,15 @@ public sealed class MySqlDistributedLockProvider : DbDistributedLockProvider, ID
     }
 
     protected override async Task<object> HealthCheckServerDataAsync(DbConnection connection, CancellationToken cancellationToken)
-    {
-        await using var reader = await connection.ExecuteReaderAsync(
-            command => command.WithCommandText("SELECT current_timestamp as time, @@hostname as hostname, @@port as port"),
+        => await connection.QuerySingleAsync(
+            c => c.WithCommandText("SELECT current_timestamp as time, @@hostname as hostname, @@port as port"),
+            r => new
+            {
+                current_timestamp = DateTime.SpecifyKind(r.GetDateTime("time"), DateTimeKind.Unspecified).ToString("O"),
+                hostname = r["hostname"],
+                port = r["port"],
+            },
             cancellationToken).ConfigureAwait(false);
-
-        if (!await reader.ReadAsync(cancellationToken))
-        {
-            throw new Exception("Health check query returned no rows.");
-        }
-
-        return new
-        {
-            current_timestamp = DateTime.SpecifyKind(reader.GetFieldValue<DateTime>("time"), DateTimeKind.Unspecified).ToString("O"),
-            hostname = reader["hostname"],
-            port = reader["port"],
-        };
-    }
 
     private async Task<bool> GetLockAsync(DbConnection connection, string name, int timeoutSeconds, LockEventLogger? eventLogger, CancellationToken cancellationToken)
     {

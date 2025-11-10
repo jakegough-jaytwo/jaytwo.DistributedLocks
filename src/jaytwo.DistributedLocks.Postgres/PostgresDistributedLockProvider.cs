@@ -117,24 +117,16 @@ public sealed class PostgresDistributedLockProvider : DbDistributedLockProvider,
     }
 
     protected override async Task<object> HealthCheckServerDataAsync(DbConnection connection, CancellationToken cancellationToken)
-    {
-        await using var reader = await connection.ExecuteReaderAsync(
-            command => command.WithCommandText("SELECT current_timestamp as current_timestamp, localtimestamp as localtimestamp, cast(inet_server_addr() as VARCHAR) AS inet_server_addr, inet_server_port() AS inet_server_port"),
+        => await connection.QuerySingleAsync(
+            c => c.WithCommandText("SELECT current_timestamp as current_timestamp, localtimestamp as localtimestamp, cast(inet_server_addr() as VARCHAR) AS inet_server_addr, inet_server_port() AS inet_server_port"),
+            r => new
+            {
+                current_timestamp = DateTime.SpecifyKind(r.GetDateTime("current_timestamp"), DateTimeKind.Unspecified).ToString("O"),
+                localtimestamp = DateTime.SpecifyKind(r.GetDateTime("localtimestamp"), DateTimeKind.Unspecified).ToString("O"),
+                inet_server_addr = r["inet_server_addr"],
+                inet_server_port = r["inet_server_port"],
+            },
             cancellationToken).ConfigureAwait(false);
-
-        if (!await reader.ReadAsync(cancellationToken))
-        {
-            throw new Exception("Health check query returned no rows.");
-        }
-
-        return new
-        {
-            current_timestamp = DateTime.SpecifyKind(reader.GetFieldValue<DateTime>("current_timestamp"), DateTimeKind.Unspecified).ToString("O"),
-            localtimestamp = DateTime.SpecifyKind(reader.GetFieldValue<DateTime>("localtimestamp"), DateTimeKind.Unspecified).ToString("O"),
-            inet_server_addr = reader["inet_server_addr"],
-            inet_server_port = reader["inet_server_port"],
-        };
-    }
 
     private async Task<bool> PgTryAdvisoryLock(long key, DbConnection connection, DbTransaction transaction, LockEventLogger? eventLogger, CancellationToken cancellationToken)
     {

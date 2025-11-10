@@ -32,13 +32,19 @@ public static class DbConnectionFactoryExtensions
         return await connection.ExecuteScalarAsync<T>(builder, cancellationToken);
     }
 
-    public static DbDataReader ExecuteReader(this IDbConnectionFactory factory, Action<DbCommand> builder, CommandBehavior commandBehavior = CommandBehavior.Default)
+    public static DbDataReader ExecuteReader(this IDbConnectionFactory factory, Action<DbCommand> builder)
+        => factory.ExecuteReader(builder, CommandBehavior.Default);
+
+    public static DbDataReader ExecuteReader(this IDbConnectionFactory factory, Action<DbCommand> builder, CommandBehavior commandBehavior)
     {
         var connection = factory.OpenConnection(); // not disposing here because the caller is expected to dispose the reader which will dispose the connection
         return connection.ExecuteReader(builder, commandBehavior | CommandBehavior.CloseConnection);
     }
 
-    public static async Task<DbDataReader> ExecuteReaderAsync(this IDbConnectionFactory factory, Action<DbCommand> builder, CommandBehavior commandBehavior = CommandBehavior.Default, CancellationToken cancellationToken = default)
+    public static async Task<DbDataReader> ExecuteReaderAsync(this IDbConnectionFactory factory, Action<DbCommand> builder, CancellationToken cancellationToken = default)
+        => await factory.ExecuteReaderAsync(builder, CommandBehavior.Default, cancellationToken);
+
+    public static async Task<DbDataReader> ExecuteReaderAsync(this IDbConnectionFactory factory, Action<DbCommand> builder, CommandBehavior commandBehavior, CancellationToken cancellationToken = default)
     {
         var connection = await factory.OpenConnectionAsync(cancellationToken); // not disposing here because the caller is expected to dispose the reader which will dispose the connection
         return await connection.ExecuteReaderAsync(builder, commandBehavior | CommandBehavior.CloseConnection, cancellationToken);
