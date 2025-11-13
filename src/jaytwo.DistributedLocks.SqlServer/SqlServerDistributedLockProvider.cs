@@ -4,8 +4,8 @@ using System.Data.Common;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
-using jaytwo.DistributedLocks.Db;
 using jaytwo.DistributedLocks.Logging;
+using jaytwo.Ergonomics.Ado;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 
@@ -154,7 +154,7 @@ public sealed class SqlServerDistributedLockProvider : DbDistributedLockProvider
     }
 
     protected override async Task<object> HealthCheckServerDataAsync(DbConnection connection, CancellationToken cancellationToken)
-        => await connection.QuerySingleAsync(
+        => await connection.ExecuteReadSingleAsync(
             c => c.WithCommandText("SELECT @@SERVERNAME as servername, CURRENT_TIMESTAMP as time"),
             r => new
             {

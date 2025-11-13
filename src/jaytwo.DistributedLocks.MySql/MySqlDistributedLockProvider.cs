@@ -4,8 +4,8 @@ using System.Data.Common;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
-using jaytwo.DistributedLocks.Db;
 using jaytwo.DistributedLocks.Logging;
+using jaytwo.Ergonomics.Ado;
 using Microsoft.Extensions.Logging;
 
 namespace jaytwo.DistributedLocks.MySql;
@@ -139,7 +139,7 @@ public sealed class MySqlDistributedLockProvider : DbDistributedLockProvider, ID
     }
 
     protected override async Task<object> HealthCheckServerDataAsync(DbConnection connection, CancellationToken cancellationToken)
-        => await connection.QuerySingleAsync(
+        => await connection.ExecuteReadSingleAsync(
             c => c.WithCommandText("SELECT current_timestamp as time, @@hostname as hostname, @@port as port"),
             r => new
             {

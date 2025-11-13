@@ -4,8 +4,8 @@ using System.Data.Common;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
-using jaytwo.DistributedLocks.Db;
 using jaytwo.DistributedLocks.Logging;
+using jaytwo.Ergonomics.Ado;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 
@@ -117,7 +117,7 @@ public sealed class PostgresDistributedLockProvider : DbDistributedLockProvider,
     }
 
     protected override async Task<object> HealthCheckServerDataAsync(DbConnection connection, CancellationToken cancellationToken)
-        => await connection.QuerySingleAsync(
+        => await connection.ExecuteReadSingleAsync(
             c => c.WithCommandText("SELECT current_timestamp as current_timestamp, localtimestamp as localtimestamp, cast(inet_server_addr() as VARCHAR) AS inet_server_addr, inet_server_port() AS inet_server_port"),
             r => new
             {

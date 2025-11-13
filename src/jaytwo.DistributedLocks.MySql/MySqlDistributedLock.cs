@@ -3,8 +3,8 @@ using System.Data.Common;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
-using jaytwo.DistributedLocks.Db;
 using jaytwo.DistributedLocks.Logging;
+using jaytwo.Ergonomics.Ado;
 
 namespace jaytwo.DistributedLocks.MySql;
 

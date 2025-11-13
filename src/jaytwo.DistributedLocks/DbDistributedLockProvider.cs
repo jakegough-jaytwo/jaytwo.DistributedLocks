@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Data.Common;
 using System.Threading;
 using System.Threading.Tasks;
-using jaytwo.DistributedLocks.Db;
+using jaytwo.Ergonomics.Ado;
 using Microsoft.Extensions.Logging;
 
 namespace jaytwo.DistributedLocks;
