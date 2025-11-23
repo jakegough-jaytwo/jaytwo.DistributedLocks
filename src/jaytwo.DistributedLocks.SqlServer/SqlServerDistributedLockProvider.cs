@@ -192,7 +192,7 @@ public sealed class SqlServerDistributedLockProvider : DbDistributedLockProvider
             .WithParameter("@LockMode", lockMode, DbType.AnsiString, size: 32)
             .WithParameter("@LockOwner", lockOwner, DbType.AnsiString, size: 32)
             .WithParameter("@LockTimeout", timeoutMs, DbType.Int32)
-            .WithParameter("@ReturnValue", dbType: DbType.Int32, direction: ParameterDirection.ReturnValue)
+            .WithParameter("@ReturnValue", DbType.Int32, direction: ParameterDirection.ReturnValue)
             .WithCommandTimeout(SecondsCeilingFromMilliseconds(timeoutMs) + 2); // Ensure SQL command timeout won't undercut the lock timeout
 
         using var loggerScope = eventLogger?.Scope(x => x.WithFields(("sql_command", sqlCommand)));
